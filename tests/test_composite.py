@@ -276,6 +276,13 @@ class TestIntEnum:
 
         assert Extended.from_source(IntOp.ADD) is Extended.ADD
 
+    def test_source_enum_with_int(self):
+        class Extended(IntEnum, metaclass=CompositeEnumMeta, includes=(IntOp,)):
+            DIV = 4
+
+        assert Extended.ADD.source_enum is IntOp
+        assert Extended.DIV.source_enum is None
+
 
 @pytest.mark.skipif(
     sys.version_info < (3, 11),
@@ -341,6 +348,19 @@ class TestStrEnum:
 
         assert Target.PLUS.value == "+"
         assert Target.EXTRA.value == "extra"
+
+    def test_source_enum_with_strenum(self):
+        from enum import StrEnum
+
+        class StrOp(StrEnum):
+            PLUS = "+"
+            MINUS = "-"
+
+        class Extended(StrEnum, metaclass=CompositeEnumMeta, includes=(StrOp,)):
+            STAR = "*"
+
+        assert Extended.PLUS.source_enum is StrOp
+        assert Extended.STAR.source_enum is None
 
 
 class TestPreMixinPattern:

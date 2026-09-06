@@ -121,9 +121,8 @@ The metaclass validates that included values match the target's data
 type. Trying to include `IntEnum` members into a `StrEnum` raises
 `TypeError`.
 
-When using the metaclass directly, you get all class-level methods
-(`to_source`, `members_from`, etc.) but not the `source_enum`
-instance property. Use `TokenType.to_source(member)` instead.
+All class-level methods and the `source_enum` property work the
+same way whether you use `CompositeEnum` or the metaclass directly.
 
 ### Pre-3.11 mixin pattern
 

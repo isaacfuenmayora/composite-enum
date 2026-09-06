@@ -39,6 +39,11 @@ def _check_data_type(
         )
 
 
+def _get_source_enum(self: Enum) -> type[Enum] | None:
+    """The source enum this member was included from, or None."""
+    return self.__class__._composite_source_map_.get(self.name)  # type: ignore[attr-defined]
+
+
 class CompositeEnumMeta(EnumMeta):
     """Metaclass that composes members from other enums into a new one."""
 
@@ -97,6 +102,7 @@ class CompositeEnumMeta(EnumMeta):
 
         cls._composite_source_map_ = source_map
         cls._composite_includes_ = tuple(includes)
+        cls.source_enum = property(_get_source_enum)  # type: ignore[attr-defined]
         return cls
 
     def included_enums(cls) -> tuple[type[Enum], ...]:
@@ -130,9 +136,4 @@ class CompositeEnumMeta(EnumMeta):
 
 
 class CompositeEnum(Enum, metaclass=CompositeEnumMeta):
-    """Enum base class with composition support via the ``source_enum`` property."""
-
-    @property
-    def source_enum(self) -> type[Enum] | None:
-        """The source enum this member was included from, or None."""
-        return self.__class__._composite_source_map_.get(self.name)
+    """Enum base class with composition support."""
