@@ -1,0 +1,43 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Unit test / coverage reports
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Environments
+.env
+.venv
+venv/
+env/
+
+# Type checkers
+.mypy_cache/
+.pytype/
+.pyre/
+
+# Linting
+.ruff_cache/
+
+# PyPI configuration
+.pypirc
+
+# IDE
+.idea/
+.vscode/
