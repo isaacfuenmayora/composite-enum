@@ -36,7 +36,7 @@ class TestSingleSource:
     """Tests for composing from a single source enum."""
 
     def setup_method(self):
-        class TokenType(CompositeEnum, includes=(Operator,)):
+        class TokenType(CompositeEnum, includes=Operator):
             IDENT = "IDENT"
             ASSIGN = "="
 
@@ -209,6 +209,29 @@ class TestIncludesAsSequence:
         assert isinstance(result, tuple)
         assert result == (Operator,)
 
+    def test_bare_class_includes(self):
+        class TokenType(CompositeEnum, includes=Operator):
+            IDENT = "IDENT"
+
+        assert TokenType.UNION.value == "|"
+        assert TokenType.IDENT.value == "IDENT"
+        assert len(TokenType) == 5  # 4 from Operator + 1 own
+
+    def test_bare_class_source_enum(self):
+        class TokenType(CompositeEnum, includes=Operator):
+            IDENT = "IDENT"
+
+        assert TokenType.UNION.source_enum is Operator
+        assert TokenType.IDENT.source_enum is None
+
+    def test_bare_class_included_enums(self):
+        class TokenType(CompositeEnum, includes=Operator):
+            IDENT = "IDENT"
+
+        result = TokenType.included_enums()
+        assert isinstance(result, tuple)
+        assert result == (Operator,)
+
 
 class TestNameConflicts:
     def test_conflict_between_sources_raises(self):
@@ -226,7 +249,7 @@ class TestNameConflicts:
     def test_conflict_between_source_and_body_raises(self):
         with pytest.raises(TypeError, match="already defined"):
 
-            class Bad(CompositeEnum, includes=(Operator,)):
+            class Bad(CompositeEnum, includes=Operator):
                 UNION = "something_else"
 
 
@@ -234,23 +257,23 @@ class TestTypeValidation:
     def test_non_enum_in_includes_raises(self):
         with pytest.raises(TypeError, match="includes expects Enum types"):
 
-            class Bad(CompositeEnum, includes=(str,)):
+            class Bad(CompositeEnum, includes=str):
                 X = 1
 
     def test_int_values_into_str_target_raises(self):
         with pytest.raises(TypeError, match="requires str values"):
 
-            class Bad(str, Enum, metaclass=CompositeEnumMeta, includes=(IntOp,)):
+            class Bad(str, Enum, metaclass=CompositeEnumMeta, includes=IntOp):
                 X = "x"
 
     def test_str_values_into_int_target_raises(self):
         with pytest.raises(TypeError, match="requires int values"):
 
-            class Bad(IntEnum, metaclass=CompositeEnumMeta, includes=(Operator,)):
+            class Bad(IntEnum, metaclass=CompositeEnumMeta, includes=Operator):
                 X = 1
 
     def test_int_source_into_plain_enum_works(self):
-        class Target(CompositeEnum, includes=(IntOp,)):
+        class Target(CompositeEnum, includes=IntOp):
             EXTRA = "extra"
 
         assert Target.ADD.value == 1
@@ -276,13 +299,13 @@ class TestFlagRejection:
 
         with pytest.raises(TypeError, match="Flag enum"):
 
-            class Bad(CompositeEnum, includes=(Perms,)):
+            class Bad(CompositeEnum, includes=Perms):
                 OTHER = 4
 
 
 class TestIntEnum:
     def test_int_source_into_int_target(self):
-        class Extended(IntEnum, metaclass=CompositeEnumMeta, includes=(IntOp,)):
+        class Extended(IntEnum, metaclass=CompositeEnumMeta, includes=IntOp):
             DIV = 4
             MOD = 5
 
@@ -291,19 +314,19 @@ class TestIntEnum:
         assert isinstance(Extended.ADD, int)
 
     def test_to_source_with_int(self):
-        class Extended(IntEnum, metaclass=CompositeEnumMeta, includes=(IntOp,)):
+        class Extended(IntEnum, metaclass=CompositeEnumMeta, includes=IntOp):
             DIV = 4
 
         assert Extended.to_source(Extended.ADD) is IntOp.ADD
 
     def test_from_source_with_int(self):
-        class Extended(IntEnum, metaclass=CompositeEnumMeta, includes=(IntOp,)):
+        class Extended(IntEnum, metaclass=CompositeEnumMeta, includes=IntOp):
             DIV = 4
 
         assert Extended.from_source(IntOp.ADD) is Extended.ADD
 
     def test_source_enum_with_int(self):
-        class Extended(IntEnum, metaclass=CompositeEnumMeta, includes=(IntOp,)):
+        class Extended(IntEnum, metaclass=CompositeEnumMeta, includes=IntOp):
             DIV = 4
 
         assert Extended.ADD.source_enum is IntOp
@@ -322,7 +345,7 @@ class TestStrEnum:
             PLUS = "+"
             MINUS = "-"
 
-        class Extended(StrEnum, metaclass=CompositeEnumMeta, includes=(StrOp,)):
+        class Extended(StrEnum, metaclass=CompositeEnumMeta, includes=StrOp):
             STAR = "*"
             SLASH = "/"
 
@@ -333,7 +356,7 @@ class TestStrEnum:
     def test_plain_enum_str_values_into_strenum(self):
         from enum import StrEnum
 
-        class TokenType(StrEnum, metaclass=CompositeEnumMeta, includes=(Operator,)):
+        class TokenType(StrEnum, metaclass=CompositeEnumMeta, includes=Operator):
             IDENT = "IDENT"
 
         assert isinstance(TokenType.UNION, str)
@@ -346,7 +369,7 @@ class TestStrEnum:
             PLUS = "+"
             MINUS = "-"
 
-        class Extended(StrEnum, metaclass=CompositeEnumMeta, includes=(StrOp,)):
+        class Extended(StrEnum, metaclass=CompositeEnumMeta, includes=StrOp):
             STAR = "*"
 
         assert Extended.to_source(Extended.PLUS) is StrOp.PLUS
@@ -358,7 +381,7 @@ class TestStrEnum:
             PLUS = "+"
             MINUS = "-"
 
-        class Extended(StrEnum, metaclass=CompositeEnumMeta, includes=(StrOp,)):
+        class Extended(StrEnum, metaclass=CompositeEnumMeta, includes=StrOp):
             STAR = "*"
 
         assert Extended.from_source(StrOp.PLUS) is Extended.PLUS
@@ -369,7 +392,7 @@ class TestStrEnum:
         class StrOp(StrEnum):
             PLUS = "+"
 
-        class Target(CompositeEnum, includes=(StrOp,)):
+        class Target(CompositeEnum, includes=StrOp):
             EXTRA = "extra"
 
         assert Target.PLUS.value == "+"
@@ -382,7 +405,7 @@ class TestStrEnum:
             PLUS = "+"
             MINUS = "-"
 
-        class Extended(StrEnum, metaclass=CompositeEnumMeta, includes=(StrOp,)):
+        class Extended(StrEnum, metaclass=CompositeEnumMeta, includes=StrOp):
             STAR = "*"
 
         assert Extended.PLUS.source_enum is StrOp
@@ -391,7 +414,7 @@ class TestStrEnum:
 
 class TestPreMixinPattern:
     def test_str_enum_mixin_pre311(self):
-        class TokenType(str, Enum, metaclass=CompositeEnumMeta, includes=(Operator,)):
+        class TokenType(str, Enum, metaclass=CompositeEnumMeta, includes=Operator):
             IDENT = "IDENT"
 
         assert isinstance(TokenType.UNION, str)
@@ -407,7 +430,7 @@ class TestAutoInSource:
             B = auto()
             C = auto()
 
-        class Target(CompositeEnum, includes=(Source,)):
+        class Target(CompositeEnum, includes=Source):
             D = 100
 
         assert Target.A.value == 1
@@ -416,7 +439,7 @@ class TestAutoInSource:
         assert Target.D.value == 100
 
 
-class _PickleTokenType(CompositeEnum, includes=(Operator,)):
+class _PickleTokenType(CompositeEnum, includes=Operator):
     IDENT = "IDENT"
 
 
@@ -456,14 +479,14 @@ class TestEdgeCases:
         class Empty(Enum):
             pass
 
-        class Target(CompositeEnum, includes=(Empty,)):
+        class Target(CompositeEnum, includes=Empty):
             X = 1
 
         assert len(Target) == 1
         assert Target.X.value == 1
 
     def test_composite_with_no_own_members(self):
-        class Target(CompositeEnum, includes=(Operator,)):
+        class Target(CompositeEnum, includes=Operator):
             pass
 
         assert len(Target) == 4
@@ -472,10 +495,10 @@ class TestEdgeCases:
 
 class TestNestedComposition:
     def setup_method(self):
-        class Base(CompositeEnum, includes=(Operator,)):
+        class Base(CompositeEnum, includes=Operator):
             IDENT = "IDENT"
 
-        class Extended(CompositeEnum, includes=(Base,)):
+        class Extended(CompositeEnum, includes=Base):
             EXTRA = "extra"
 
         self.Base = Base
@@ -512,7 +535,7 @@ class TestSetifyUseCase:
     def setup_method(self):
         self.Operator = Operator
 
-        class TokenType(CompositeEnum, includes=(Operator,)):
+        class TokenType(CompositeEnum, includes=Operator):
             IDENT = "IDENT"
             STRING = "STRING"
             ASSIGN = "="

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from enum import Enum, EnumMeta, Flag
 from collections.abc import Sequence
+from enum import Enum, EnumMeta, Flag
 from typing import Any
 
 
@@ -40,6 +40,15 @@ def _check_data_type(
         )
 
 
+def _normalize_includes(
+    includes: type[Enum] | Sequence[type[Enum]],
+) -> Sequence[type[Enum]]:
+    """Wrap a bare enum class into a one-element tuple."""
+    if isinstance(includes, Sequence):
+        return includes
+    return (includes,)
+
+
 def _get_source_enum(self: Enum) -> type[Enum] | None:
     """The source enum this member was included from, or None."""
     return self.__class__._composite_source_map_.get(self.name)  # type: ignore[attr-defined]
@@ -56,10 +65,11 @@ class CompositeEnumMeta(EnumMeta):
         mcls,
         name: str,
         bases: tuple[type, ...],
-        includes: Sequence[type[Enum]] = (),
+        includes: type[Enum] | Sequence[type[Enum]] = (),
         **kwds: Any,
     ):
         namespace = super().__prepare__(name, bases, **kwds)
+        includes = _normalize_includes(includes)
 
         data_type = _get_data_type(bases)
         seen: dict[str, type[Enum]] = {}
@@ -91,10 +101,11 @@ class CompositeEnumMeta(EnumMeta):
         name: str,
         bases: tuple[type, ...],
         namespace: dict[str, Any],
-        includes: Sequence[type[Enum]] = (),
+        includes: type[Enum] | Sequence[type[Enum]] = (),
         **kwds: Any,
     ):
         cls = super().__new__(mcls, name, bases, namespace, **kwds)  # type: ignore[arg-type]
+        includes = _normalize_includes(includes)
 
         source_map: dict[str, type[Enum]] = {}
         for source in includes:
@@ -114,10 +125,10 @@ class CompositeEnumMeta(EnumMeta):
         """Check if this composite includes members from *source*."""
         return source in cls.included_enums()
 
-    def members_from(cls, source: type[Enum]) -> frozenset:
+    def members_from(cls, source: type[Enum]) -> frozenset[Enum]:
         """Return the subset of members that originated from *source*."""
         source_map = getattr(cls, "_composite_source_map_", {})
-        return frozenset(cls[name] for name, src in source_map.items() if src is source)
+        return frozenset(cls[name] for name, src in source_map.items() if src is source)  # type: ignore[arg-type]
 
     def to_source(cls, member: Enum) -> Enum | None:
         """Convert a composite member back to its source enum member, or None."""
