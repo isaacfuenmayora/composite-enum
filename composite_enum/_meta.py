@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum, EnumMeta, Flag
+from collections.abc import Sequence
 from typing import Any
 
 
@@ -55,7 +56,7 @@ class CompositeEnumMeta(EnumMeta):
         mcls,
         name: str,
         bases: tuple[type, ...],
-        includes: tuple[type[Enum], ...] = (),
+        includes: Sequence[type[Enum]] = (),
         **kwds: Any,
     ):
         namespace = super().__prepare__(name, bases, **kwds)
@@ -90,7 +91,7 @@ class CompositeEnumMeta(EnumMeta):
         name: str,
         bases: tuple[type, ...],
         namespace: dict[str, Any],
-        includes: tuple[type[Enum], ...] = (),
+        includes: Sequence[type[Enum]] = (),
         **kwds: Any,
     ):
         cls = super().__new__(mcls, name, bases, namespace, **kwds)  # type: ignore[arg-type]

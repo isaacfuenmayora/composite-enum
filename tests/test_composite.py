@@ -184,6 +184,32 @@ class TestNoIncludes:
         assert Plain.A.value == 1
 
 
+class TestIncludesAsSequence:
+    def test_list_includes(self):
+        class TokenType(CompositeEnum, includes=[Operator]):
+            IDENT = "IDENT"
+
+        assert TokenType.UNION.value == "|"
+        assert TokenType.IDENT.value == "IDENT"
+        assert len(TokenType) == 5  # 4 from Operator + 1 own
+
+    def test_list_multiple_sources(self):
+        class Combined(CompositeEnum, includes=[Operator, Priority]):
+            EXTRA = "extra"
+
+        assert Combined.UNION.value == "|"
+        assert Combined.LOW.value == 1
+        assert len(Combined) == 8  # 4 + 3 + 1
+
+    def test_included_enums_returns_tuple_regardless(self):
+        class TokenType(CompositeEnum, includes=[Operator]):
+            IDENT = "IDENT"
+
+        result = TokenType.included_enums()
+        assert isinstance(result, tuple)
+        assert result == (Operator,)
+
+
 class TestNameConflicts:
     def test_conflict_between_sources_raises(self):
         class A(Enum):
