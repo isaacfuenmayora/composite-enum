@@ -14,12 +14,16 @@ class Operator(Enum):
     DIFF = "-"
     SYM_DIFF = "^"
 
-class TokenType(CompositeEnum, includes=(Operator,)):
+class TokenType(CompositeEnum, includes=Operator):
     IDENT = "IDENT"
     STRING = "STRING"
     ASSIGN = "="
     LPAREN = "("
     RPAREN = ")"
+
+# TokenType has all 9 members: 4 from Operator + 5 of its own
+list(TokenType)
+# [UNION, INTERSECT, DIFF, SYM_DIFF, IDENT, STRING, ASSIGN, LPAREN, RPAREN]
 
 # Included members are real members
 TokenType.UNION          # <TokenType.UNION: '|'>
@@ -70,68 +74,93 @@ but it means you can't express "TokenType is Operator plus some extra token
 types" through inheritance. You end up duplicating the values and hoping
 they stay in sync.
 
+This restriction exists for good reason.
+[`flufl.enum`](https://gitlab.com/flufl/flufl.enum), the precursor to
+Python's stdlib `enum`, supported member inheritance natively. That
+feature was dropped in [PEP 435](https://peps.python.org/pep-0435/) because it conflicts with members being
+instances of their enum class. CPython core developer Alyssa Coghlan
+[later speculated](https://python-notes.curiousefficiency.org/en/latest/python3/enum_creation.html#support-for-alternate-declaration-syntaxes)
+that extensible enums would require aggregating members from multiple
+independent enumerations, sketching a hypothetical syntax:
+
+```python
+class MoreColors(AggregateEnum, extends=Color):
+    cyan = ...
+    magenta = ...
+```
+
+This was never implemented in the stdlib. `composite-enum` takes a
+similar approach using `includes` instead of `extends`.
+
 `composite-enum` solves this with a metaclass that injects source enum
 members into the new enum's namespace during class creation.
 
 ## Usage
 
-### Basic: `CompositeEnum` base class
-
-```python
-from composite_enum import CompositeEnum
-
-class TokenType(CompositeEnum, includes=(Operator,)):
-    IDENT = "IDENT"
-```
-
-Gives you the `source_enum` property on each member.
+The opening example covers the basics. Here's what else you can do.
 
 ### Multiple sources
 
 ```python
-class Priority(Enum):
-    LOW = 1
-    MEDIUM = 2
-    HIGH = 3
+class Delimiter(Enum):
+    COMMA = ","
+    SEMICOLON = ";"
 
-class Everything(CompositeEnum, includes=(Operator, Priority)):
-    MISC = "misc"
+class TokenType(CompositeEnum, includes=(Operator, Delimiter)):
+    IDENT = "IDENT"
+    STRING = "STRING"
+    ASSIGN = "="
+    LPAREN = "("
+    RPAREN = ")"
+
+TokenType.included_enums()  # (Operator, Delimiter)
+
+# Included members appear first, in includes order, then class body
+list(TokenType)
+# [UNION, INTERSECT, DIFF, SYM_DIFF, COMMA, SEMICOLON, IDENT, STRING, ASSIGN, LPAREN, RPAREN]
 ```
-
-Included members appear in iteration order: Operator members first,
-then Priority, then class body members.
 
 ### With StrEnum / IntEnum
 
-`CompositeEnum` extends `Enum`, so it can't be combined with `StrEnum`
-or `IntEnum` (Python's enum inheritance rules). Use the metaclass
-directly:
+`CompositeEnum` can't be used alongside `StrEnum` or `IntEnum`
+(Python's enum inheritance rules). Use the metaclass directly:
 
 ```python
 from enum import StrEnum  # 3.11+
 from composite_enum import CompositeEnumMeta
 
-class TokenType(StrEnum, metaclass=CompositeEnumMeta, includes=(Operator,)):
+class TokenType(StrEnum, metaclass=CompositeEnumMeta, includes=Operator):
     IDENT = "IDENT"
 
 isinstance(TokenType.UNION, str)  # True
 ```
 
 The metaclass validates that included values match the target's data
-type. Trying to include `IntEnum` members into a `StrEnum` raises
-`TypeError`.
+type. All introspection methods work the same either way.
 
-All class-level methods and the `source_enum` property work the
-same way whether you use `CompositeEnum` or the metaclass directly.
-
-### Pre-3.11 mixin pattern
+Pre-3.11, use the `(str, Enum)` mixin pattern in place of `StrEnum`:
 
 ```python
-class TokenType(str, Enum, metaclass=CompositeEnumMeta, includes=(Operator,)):
+class TokenType(str, Enum, metaclass=CompositeEnumMeta, includes=Operator):
     IDENT = "IDENT"
 ```
+The same metaclass approach works for any data type mixin, not just
+`str` and `int` (e.g. `float, Enum` or a custom type).
 
-Works the same as `StrEnum`.
+### Nested composition
+
+Composing from an already-composite enum works. `source_enum` points
+to the immediate source, not the original:
+
+```python
+class Base(CompositeEnum, includes=Operator):
+    IDENT = "IDENT"
+
+class Extended(CompositeEnum, includes=Base):
+    EXTRA = "extra"
+
+Extended.UNION.source_enum  # <enum 'Base'>, not Operator
+```
 
 ## API Reference
 
@@ -147,10 +176,11 @@ The metaclass powering composition. Use directly when you need
 #### `includes` (class keyword)
 
 ```python
-class TokenType(CompositeEnum, includes=(Operator, Delimiter)):
+class TokenType(CompositeEnum, includes=Operator):               # single source
+class TokenType(CompositeEnum, includes=(Operator, Delimiter)):  # multiple sources
 ```
 
-Tuple of `Enum` types whose members should be included.
+A single `Enum` type or a sequence of them whose members should be included.
 
 #### `member.source_enum`
 
@@ -212,16 +242,6 @@ Source enums (the ones in `includes`) can be any `Enum`, `StrEnum`, or
 | `StrEnum` / `str, Enum` | Must be `str` |
 | `IntEnum` / `int, Enum` | Must be `int` |
 
-### `auto()` in source enums
-
-Works fine. `auto()` values are resolved before inclusion, so the target
-enum receives concrete values (1, 2, 3, etc.).
-
-**Caution with `auto()` in the target alongside includes:** the auto
-numbering in the target's class body doesn't see the included values.
-This can produce duplicate values (which Python treats as aliases).
-Use explicit values in the target body when composing.
-
 ## Caveats
 
 **Implementation detail dependency.** The metaclass injects members via
@@ -235,12 +255,22 @@ change, but it's not a guaranteed public API. Tested on 3.10 through
 shadows the corresponding metaclass method. Don't do that.
 
 **Value aliases.** If two included sources share a value (different
-name, same value), Python's standard alias behavior applies: the
-second becomes an alias of the first. This is normal enum behavior,
-not composite-specific.
+name, same value), the second becomes an alias of the first. This is
+standard enum behavior, not composite-specific.
 
-**Pickling.** Works. Composite members pickle by name, same as regular
-enum members.
+**`auto()` in the target.** `auto()` numbering in the target doesn't
+account for included values, which can produce unintended aliases:
+
+```python
+class Source(Enum):
+    A = 1
+    B = 2
+
+class Target(CompositeEnum, includes=Source):
+    C = auto()  # also 1, becomes an alias of A
+```
+
+Use explicit values in the target body when composing.
 
 ## How It Works
 
@@ -257,22 +287,37 @@ The metaclass overrides `__prepare__` and `__new__`:
    `TypeError` immediately.
 
 3. **`__new__`** builds the actual enum class via `super().__new__()`,
-   then attaches metadata (source map, includes tuple) for introspection.
+   then attaches metadata for introspection.
 
-The result is a normal Python enum with normal members. No runtime
-proxying, no descriptor tricks, no `__getattr__` overrides.
+The result is a normal stdlib `Enum`. Standard tools like `isinstance`,
+`pickle`, `match/case`, and `list()` all work exactly as they would
+with any hand-written enum. The only additions are the introspection
+methods (`source_enum`, `to_source`, etc.).
 
 ## Alternatives
 
-- **[aenum](https://github.com/ethanfurman/aenum)** by the stdlib `enum`
-  author has `extend_enum()` for adding members to an existing enum at
-  runtime. `composite-enum` is for building new enums declaratively from
-  existing ones at class-definition time.
+- **[flufl.enum](https://fluflenum.readthedocs.io/en/stable/using.html#extending-an-enumeration-through-subclassing)**
+  is the original Python enum package (predating the stdlib) and still
+  supports member inheritance natively. If you want true subclassing
+  where parent and child share member identity, and you don't need to
+  stay on the stdlib `enum`, `flufl.enum` is actively maintained and
+  battle-tested since 2004.
 
-- **[extendable-enum](https://pypi.org/project/extendable-enum/)** has
-  `@copy_enum_members` for copying members via a decorator. Similar goal,
-  but no source tracking, no type compatibility checks, and no
-  StrEnum/IntEnum awareness.
+- **[aenum](https://github.com/ethanfurman/aenum)** by the stdlib `enum`
+  maintainer provides `extend_enum()` for adding members to an existing enum
+  at runtime. If you need to modify enums you don't control,
+  `aenum` is the mature, well-established choice.
+
+- **[extendable-enum](https://pypi.org/project/extendable-enum/)** takes a decorator approach: `@inheritable_enum` makes an existing enum subclassable (so `class Derived(Base):` works directly), while `@copy_enum_members` copies members from one enum into a new, distinct class.
+
+- **[unionenum.py](https://gist.github.com/plammens/ab1a2f236b5c6d748f193eb12eefa6dd)**
+  is a clever gist that creates union enums where members retain their
+  original type identity rather than becoming members of the new class.
+
+`composite-enum` occupies a slightly different niche: declarative
+composition of one or more source enums at class-definition time, with
+source tracking and type compatibility checks. If one of the above fits
+your use case better, use it.
 
 ## License
 
