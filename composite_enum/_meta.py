@@ -40,13 +40,21 @@ def _check_data_type(
         )
 
 
+def _check_duplicate_sources(includes: tuple[type[Enum], ...]) -> None:
+    seen: set[type[Enum]] = set()
+    for source in includes:
+        if source in seen:
+            raise TypeError(f"duplicate source enum in includes: {source.__name__}")
+        seen.add(source)
+
+
 def _normalize_includes(
     includes: type[Enum] | Sequence[type[Enum]],
-) -> Sequence[type[Enum]]:
-    """Wrap a bare enum class into a one-element tuple."""
-    if isinstance(includes, Sequence):
-        return includes
-    return (includes,)
+) -> tuple[type[Enum], ...]:
+    """Wrap a bare enum class or sequence into a tuple, rejecting strings."""
+    if isinstance(includes, Sequence) and not isinstance(includes, str):
+        return tuple(includes)
+    return (includes,)  # type: ignore[return-value]
 
 
 def _get_source_enum(self: Enum) -> type[Enum] | None:
@@ -70,6 +78,7 @@ class CompositeEnumMeta(EnumMeta):
     ):
         namespace = super().__prepare__(name, bases, **kwds)
         includes = _normalize_includes(includes)
+        _check_duplicate_sources(includes)
 
         data_type = _get_data_type(bases)
         seen: dict[str, type[Enum]] = {}
@@ -113,7 +122,7 @@ class CompositeEnumMeta(EnumMeta):
                 source_map[member.name] = source
 
         cls._composite_source_map_ = source_map
-        cls._composite_includes_ = tuple(includes)
+        cls._composite_includes_ = includes
         cls.source_enum = property(_get_source_enum)  # type: ignore[attr-defined]
         return cls
 

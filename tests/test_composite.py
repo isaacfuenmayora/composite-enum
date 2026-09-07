@@ -289,6 +289,28 @@ class TestTypeValidation:
         assert len(Target) == 8  # 3 from IntOp + 4 from Operator + 1 own
 
 
+class TestStringIncludes:
+    def test_string_includes_raises(self):
+        with pytest.raises(TypeError, match="includes expects Enum types"):
+
+            class Bad(CompositeEnum, includes="Operator"):
+                X = 1
+
+
+class TestDuplicateSource:
+    def test_duplicate_source_raises(self):
+        with pytest.raises(TypeError, match="duplicate source enum in includes: Operator"):
+
+            class Bad(CompositeEnum, includes=(Operator, Operator)):
+                EXTRA = "extra"
+
+    def test_duplicate_source_with_others_raises(self):
+        with pytest.raises(TypeError, match="duplicate source enum in includes: Operator"):
+
+            class Bad(CompositeEnum, includes=(Operator, Priority, Operator)):
+                EXTRA = "extra"
+
+
 class TestFlagRejection:
     def test_flag_source_raises(self):
         from enum import Flag
