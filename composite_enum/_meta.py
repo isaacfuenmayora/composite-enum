@@ -72,6 +72,15 @@ def _get_source_enum(self: Enum) -> type[Enum] | None:
     return self.__class__._composite_source_map_.get(self.name)  # type: ignore[attr-defined]
 
 
+def _to_source(self: Enum) -> Enum | None:
+    """Convert this composite member back to its source enum member, or None."""
+    source_map = self.__class__._composite_source_map_  # type: ignore[attr-defined]
+    source: type[Enum] | None = source_map.get(self.name)
+    if source is None:
+        return None
+    return source(self.value)
+
+
 class CompositeEnumMeta(EnumMeta):
     """Metaclass that composes members from other enums into a new one."""
 
@@ -142,6 +151,7 @@ class CompositeEnumMeta(EnumMeta):
         cls._composite_source_map_ = source_map
         cls._composite_includes_ = includes
         cls.source_enum = property(_get_source_enum)  # type: ignore[attr-defined]
+        cls.to_source = _to_source  # type: ignore[attr-defined]
         return cls
 
     def included_enums(cls) -> tuple[type[Enum], ...]:
@@ -156,14 +166,6 @@ class CompositeEnumMeta(EnumMeta):
         """Return the subset of members that originated from *source*."""
         source_map = getattr(cls, "_composite_source_map_", {})
         return frozenset(cls[name] for name, src in source_map.items() if src is source)  # type: ignore[arg-type]
-
-    def to_source(cls, member: Enum) -> Enum | None:
-        """Convert a composite member back to its source enum member, or None."""
-        source_map = getattr(cls, "_composite_source_map_", {})
-        source = source_map.get(member.name)
-        if source is None:
-            return None
-        return source(member.value)
 
     def from_source(cls, member: Enum) -> Enum | None:
         """Convert a source enum member to its composite equivalent, or None."""

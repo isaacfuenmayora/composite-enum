@@ -67,12 +67,12 @@ class TestSingleSource:
         assert self.TokenType.IDENT.source_enum is None
 
     def test_to_source_converts_back(self):
-        original = self.TokenType.to_source(self.TokenType.UNION)
+        original = self.TokenType.UNION.to_source()
         assert original is Operator.UNION
         assert type(original) is Operator
 
     def test_to_source_returns_none_for_own_member(self):
-        assert self.TokenType.to_source(self.TokenType.IDENT) is None
+        assert self.TokenType.IDENT.to_source() is None
 
     def test_from_source_converts_to_composite(self):
         result = self.TokenType.from_source(Operator.UNION)
@@ -362,7 +362,7 @@ class TestIntEnum:
         class Extended(IntEnum, metaclass=CompositeEnumMeta, includes=IntOp):
             DIV = 4
 
-        assert Extended.to_source(Extended.ADD) is IntOp.ADD
+        assert Extended.ADD.to_source() is IntOp.ADD
 
     def test_from_source_with_int(self):
         class Extended(IntEnum, metaclass=CompositeEnumMeta, includes=IntOp):
@@ -417,7 +417,7 @@ class TestStrEnum:
         class Extended(StrEnum, metaclass=CompositeEnumMeta, includes=StrOp):
             STAR = "*"
 
-        assert Extended.to_source(Extended.PLUS) is StrOp.PLUS
+        assert Extended.PLUS.to_source() is StrOp.PLUS
 
     def test_from_source_with_strenum(self):
         from enum import StrEnum
@@ -559,14 +559,14 @@ class TestNestedComposition:
         assert self.Extended.EXTRA.source_enum is None
 
     def test_to_source_returns_immediate_source_member(self):
-        result = self.Extended.to_source(self.Extended.UNION)
+        result = self.Extended.UNION.to_source()
         assert result is self.Base.UNION
         assert type(result) is self.Base
 
     def test_chaining_to_source_reaches_original(self):
-        base_member = self.Extended.to_source(self.Extended.UNION)
+        base_member = self.Extended.UNION.to_source()
         assert base_member is not None
-        original = self.Base.to_source(base_member)
+        original = base_member.to_source()
         assert original is Operator.UNION
 
     def test_from_source_with_nested(self):
@@ -596,7 +596,7 @@ class TestSetifyUseCase:
 
     def test_bridge_to_operator_for_dispatch(self):
         token_type = self.TokenType.DIFF
-        op = self.TokenType.to_source(token_type)
+        op = token_type.to_source()
         assert op is Operator.DIFF
 
         dispatch = {
