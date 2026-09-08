@@ -693,8 +693,10 @@ class TestSourceMethodsNotTransferred:
         assert str(Target.X) != "custom:X"
 
 
-class TestAliases:
-    def test_source_alias_transferred(self):
+class TestSourceSideAliases:
+    """Tests for aliases within a single source enum."""
+
+    def setup_method(self):
         class Source(Enum):
             PRIMARY = 1
             ALIAS = 1  # noqa: PIE796
@@ -702,33 +704,31 @@ class TestAliases:
         class Target(CompositeEnum, includes=Source):
             EXTRA = "extra"
 
-        assert Target.PRIMARY.value == 1
-        assert Target["ALIAS"] is Target.PRIMARY
-        assert len(Target) == 2  # PRIMARY + EXTRA (ALIAS is alias, not counted)
+        self.Source = Source
+        self.Target = Target
+
+    def test_source_alias_transferred(self):
+        assert self.Target.PRIMARY.value == 1
+        assert self.Target["ALIAS"] is self.Target.PRIMARY
+        assert len(self.Target) == 2  # PRIMARY + EXTRA (ALIAS is alias, not counted)
 
     def test_alias_in_source_map(self):
-        class Source(Enum):
-            PRIMARY = 1
-            ALIAS = 1  # noqa: PIE796
-
-        class Target(CompositeEnum, includes=Source):
-            EXTRA = "extra"
-
-        assert Target.PRIMARY.source_enum is Source
-        assert "ALIAS" in Target.__members__
+        assert self.Target.PRIMARY.source_enum is self.Source
+        assert "ALIAS" in self.Target.__members__
 
     def test_alias_to_source_resolves(self):
-        class Source(Enum):
-            PRIMARY = 1
-            ALIAS = 1  # noqa: PIE796
+        alias = self.Target["ALIAS"]
+        assert alias.to_source() is self.Source.PRIMARY
 
-        class Target(CompositeEnum, includes=Source):
-            EXTRA = "extra"
+    def test_from_source_with_source_side_alias(self):
+        result = self.Target.from_source(self.Source.ALIAS)
+        assert result is self.Target.PRIMARY
 
-        alias = Target["ALIAS"]
-        assert alias.to_source() is Source.PRIMARY
 
-    def test_same_value_across_sources_creates_alias(self):
+class TestCrossSourceAliases:
+    """Tests for aliases created when two sources share a value."""
+
+    def setup_method(self):
         class A(Enum):
             X = 1
 
@@ -738,9 +738,28 @@ class TestAliases:
         class Combined(CompositeEnum, includes=(A, B)):
             Z = 2
 
-        assert Combined.X.value == 1
-        assert Combined.Y is Combined.X  # Y is an alias
-        assert len(Combined) == 2  # X and Z (Y is alias, not counted)
+        self.A = A
+        self.B = B
+        self.Combined = Combined
+
+    def test_same_value_creates_alias(self):
+        assert self.Combined.X.value == 1
+        assert self.Combined.Y is self.Combined.X  # Y is an alias
+        assert len(self.Combined) == 2  # X and Z (Y is alias, not counted)
+
+    def test_from_source_returns_canonical(self):
+        result = self.Combined.from_source(self.B.Y)
+        assert result is self.Combined.X
+
+    def test_source_enum_points_to_canonical_source(self):
+        assert self.Combined.X.source_enum is self.A
+
+    def test_to_source_returns_canonical(self):
+        assert self.Combined.X.to_source() is self.A.X
+
+    def test_members_from_both_sources(self):
+        assert self.Combined.members_from(self.A) == frozenset({self.Combined.X})
+        assert self.Combined.members_from(self.B) == frozenset({self.Combined.X})
 
 
 class _PickleTokenType(CompositeEnum, includes=Operator):
