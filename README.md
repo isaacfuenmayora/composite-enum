@@ -138,14 +138,20 @@ isinstance(TokenType.UNION, str)  # True
 The metaclass validates that included values match the target's data
 type. All introspection methods work the same either way.
 
-Pre-3.11, use the `(str, Enum)` mixin pattern in place of `StrEnum`:
+The same metaclass approach works for any data type mixin, not just
+`StrEnum` and `IntEnum` — use `(float, Enum)`, `(bytes, Enum)`, or
+any custom type:
 
 ```python
-class TokenType(str, Enum, metaclass=CompositeEnumMeta, includes=Operator):
-    IDENT = "IDENT"
+class Voltage(Enum):
+    LOW = 3.3
+    HIGH = 5.0
+
+class Signal(float, Enum, metaclass=CompositeEnumMeta, includes=Voltage):
+    GROUND = 0.0
+
+isinstance(Signal.LOW, float)  # True
 ```
-The same metaclass approach works for any data type mixin, not just
-`str` and `int` (e.g. `float, Enum` or a custom type).
 
 > **Note:** Type checkers have two limitations with the
 > `metaclass=CompositeEnumMeta` approach:
@@ -153,13 +159,19 @@ The same metaclass approach works for any data type mixin, not just
 > 1. They may flag the `includes` keyword, since they don't infer class
 >    keywords from metaclass signatures. Add `# type: ignore[call-arg]`
 >    to suppress this.
-> 2. The introspection API (`source_enum`, `to_source()`, `from_source()`,
->    `members_from()`, etc.) won't be visible to type checkers, because
->    the `.pyi` stub only declares these on `CompositeEnum`. This is a
->    fundamental limitation of the metaclass approach. Subclassing
->    `CompositeEnum` is the type-checker-friendly path.
+> 2. The instance-level attributes `source_enum` and `to_source()` won't
+>    be visible to type checkers, because the `.pyi` stub declares these
+>    on `CompositeEnum`, not on arbitrary metaclass-created classes. The
+>    class-level methods (`from_source()`, `members_from()`,
+>    `included_enums()`, `includes_enum()`) work fine on both paths since
+>    they're declared on the metaclass. Subclassing `CompositeEnum` is the
+>    type-checker-friendly path: `from_source()` narrows to `Self | None`
+>    and `members_from()` to `frozenset[Self]`.
 >
-> Both work correctly at runtime regardless.
+> Both work correctly at runtime regardless. Note that type checkers
+> cannot resolve dynamically injected member names (e.g.
+> `TokenType.UNION`) on either path — this is a general limitation of
+> enum metaclasses, not specific to `composite-enum`.
 
 ### Nested composition
 
@@ -272,6 +284,11 @@ Source enums (the ones in `includes`) can be any `Enum`, `StrEnum`, or
 enum module. It's been stable since Python 3.6 and is unlikely to
 change, but it's not a guaranteed public API. Tested on 3.10 through
 3.15.
+
+**Source members are not `in` the composite.** `Enum.__contains__`
+uses `isinstance`, so `Operator.UNION in TokenType` is `False` even
+though `TokenType.UNION` exists with the same value. Use
+`TokenType.from_source(Operator.UNION)` to check membership.
 
 **Reserved member names.** The names `source_enum`, `included_enums`,
 `includes_enum`, `members_from`, `to_source`, and `from_source` are
