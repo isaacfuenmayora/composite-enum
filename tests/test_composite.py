@@ -11,6 +11,7 @@ from enum import Enum, IntEnum
 import pytest
 
 from composite_enum import CompositeEnum, CompositeEnumMeta
+from composite_enum._meta import _RESERVED_NAMES
 
 
 class Operator(Enum):
@@ -309,6 +310,28 @@ class TestDuplicateSource:
 
             class Bad(CompositeEnum, includes=(Operator, Priority, Operator)):
                 EXTRA = "extra"
+
+
+class TestReservedNames:
+    @pytest.mark.parametrize("name", sorted(_RESERVED_NAMES))
+    def test_reserved_name_in_body_raises(self, name):
+        with pytest.raises(TypeError, match=f"'{name}' is reserved by CompositeEnumMeta"):
+            CompositeEnum(name, {name: 1})
+
+    @pytest.mark.parametrize("name", sorted(_RESERVED_NAMES))
+    def test_reserved_name_from_source_raises(self, name):
+        Source = Enum("Source", {name: 1})
+
+        with pytest.raises(TypeError, match=f"'{name}' is reserved by CompositeEnumMeta"):
+
+            class Bad(CompositeEnum, includes=Source):
+                EXTRA = "extra"
+
+    def test_non_reserved_name_ok(self):
+        class Ok(CompositeEnum):
+            SOURCE = "src"
+
+        assert Ok.SOURCE.value == "src"
 
 
 class TestFlagRejection:

@@ -57,6 +57,16 @@ def _normalize_includes(
     return (includes,)  # type: ignore[return-value]
 
 
+_RESERVED_NAMES = frozenset({
+    "source_enum",
+    "included_enums",
+    "includes_enum",
+    "members_from",
+    "to_source",
+    "from_source",
+})
+
+
 def _get_source_enum(self: Enum) -> type[Enum] | None:
     """The source enum this member was included from, or None."""
     return self.__class__._composite_source_map_.get(self.name)  # type: ignore[attr-defined]
@@ -114,6 +124,14 @@ class CompositeEnumMeta(EnumMeta):
         **kwds: Any,
     ):
         cls = super().__new__(mcls, name, bases, namespace, **kwds)  # type: ignore[arg-type]
+
+        for member_name in cls.__members__:
+            if member_name in _RESERVED_NAMES:
+                raise TypeError(
+                    f"'{member_name}' is reserved by CompositeEnumMeta "
+                    f"and cannot be used as a member name"
+                )
+
         includes = _normalize_includes(includes)
 
         source_map: dict[str, type[Enum]] = {}
