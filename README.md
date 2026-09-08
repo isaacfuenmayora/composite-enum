@@ -147,10 +147,19 @@ class TokenType(str, Enum, metaclass=CompositeEnumMeta, includes=Operator):
 The same metaclass approach works for any data type mixin, not just
 `str` and `int` (e.g. `float, Enum` or a custom type).
 
-> **Note:** Type checkers may flag the `includes` keyword when using
-> `metaclass=CompositeEnumMeta` directly, since they don't infer class
-> keywords from metaclass signatures. Add `# type: ignore[call-arg]`
-> to suppress this. The keyword works correctly at runtime.
+> **Note:** Type checkers have two limitations with the
+> `metaclass=CompositeEnumMeta` approach:
+>
+> 1. They may flag the `includes` keyword, since they don't infer class
+>    keywords from metaclass signatures. Add `# type: ignore[call-arg]`
+>    to suppress this.
+> 2. The introspection API (`source_enum`, `to_source()`, `from_source()`,
+>    `members_from()`, etc.) won't be visible to type checkers, because
+>    the `.pyi` stub only declares these on `CompositeEnum`. This is a
+>    fundamental limitation of the metaclass approach. Subclassing
+>    `CompositeEnum` is the type-checker-friendly path.
+>
+> Both work correctly at runtime regardless.
 
 ### Nested composition
 
@@ -288,9 +297,33 @@ Target.PRIMARY          # <Target.PRIMARY: 1>
 Target["ALIAS"]         # <Target.PRIMARY: 1> (alias, same as source)
 ```
 
-**Value aliases.** If two included sources share a value (different
-name, same value), the second becomes an alias of the first. This is
-standard enum behavior, not composite-specific.
+**Value aliases across sources.** If two included sources share a value
+(different name, same value), the second name becomes an alias of the
+first. This is standard enum behavior, not composite-specific, but it
+has implications for introspection:
+
+```python
+class A(Enum):
+    X = 1
+
+class B(Enum):
+    Y = 1
+
+class Combined(CompositeEnum, includes=(A, B)):
+    Z = 2
+
+Combined.Y                              # <Combined.X: 1> (Y is an alias)
+Combined.from_source(B.Y)               # <Combined.X: 1>
+Combined.from_source(B.Y).source_enum   # <enum 'A'> -- not B
+Combined.from_source(B.Y).to_source()   # <A.X: 1>   -- not B.Y
+Combined.members_from(A)                # frozenset({<Combined.X: 1>})
+Combined.members_from(B)                # frozenset({<Combined.X: 1>}) -- same member
+```
+
+Because `Y` is an alias for `X`, the canonical member's `source_enum`
+always points to whichever source provided the canonical name (`A`),
+regardless of which source you used in `from_source()`. Likewise,
+`members_from()` returns the canonical member for both sources.
 
 ## How It Works
 
