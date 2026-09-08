@@ -16,7 +16,9 @@ Usage::
     assert TokenType.UNION.source_enum is Operator
 """
 
+from importlib.metadata import version
+
 from composite_enum._meta import CompositeEnum, CompositeEnumMeta
 
 __all__ = ["CompositeEnum", "CompositeEnumMeta"]
-__version__ = "0.1.0"
+__version__ = version("composite-enum")
