@@ -112,17 +112,17 @@ class CompositeEnumMeta(EnumMeta):
                 )
             _check_flag(source)
 
-            for member in source:
-                if member.name in seen:
+            for member_name, member in source.__members__.items():
+                if member_name in seen:
                     raise ValueError(
-                        f"Name '{member.name}' exists in both "
-                        f"{seen[member.name].__name__} and {source.__name__}"
+                        f"Name '{member_name}' exists in both "
+                        f"{seen[member_name].__name__} and {source.__name__}"
                     )
                 _check_data_type(source, member, data_type, name)
 
-                seen[member.name] = source
+                seen[member_name] = source
                 # _EnumDict.__setitem__ registers this as an enum member candidate.
-                namespace[member.name] = member.value
+                namespace[member_name] = member.value
 
         return namespace
 
@@ -147,8 +147,8 @@ class CompositeEnumMeta(EnumMeta):
 
         source_map: dict[str, type[Enum]] = {}
         for source in includes:
-            for member in source:
-                source_map[member.name] = source
+            for member_name in source.__members__:
+                source_map[member_name] = source
 
         cls._composite_source_map_ = source_map
         cls._composite_includes_ = includes
