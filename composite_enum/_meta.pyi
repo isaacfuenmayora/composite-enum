@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from enum import Enum, EnumMeta
-from typing import Any
+from typing import Any, Self
 
 class CompositeEnumMeta(EnumMeta):
     _composite_source_map_: dict[str, type[Enum]]
@@ -21,3 +21,11 @@ class CompositeEnum(Enum, metaclass=CompositeEnumMeta):
     @property
     def source_enum(self) -> type[Enum] | None: ...
     def to_source(self) -> Enum | None: ...
+    @classmethod
+    def from_source(cls, member: Enum) -> Self | None: ...  # type: ignore[override]
+    @classmethod
+    def members_from(cls, source: type[Enum]) -> frozenset[Self]: ...  # type: ignore[override]
+    @classmethod
+    def included_enums(cls) -> tuple[type[Enum], ...]: ...
+    @classmethod
+    def includes_enum(cls, source: type[Enum]) -> bool: ...
