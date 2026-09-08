@@ -184,6 +184,39 @@ class TestNoIncludes:
 
         assert Plain.A.value == 1
 
+    def test_introspection_methods_work_without_includes(self):
+        class Plain(CompositeEnum):
+            A = 1
+
+        assert Plain.A.source_enum is None
+        assert Plain.A.to_source() is None
+        assert Plain.included_enums() == ()
+        assert Plain.members_from(Operator) == frozenset()
+        assert Plain.from_source(Operator.UNION) is None
+
+    def test_is_composite_enum_meta_instance(self):
+        class Plain(CompositeEnum):
+            A = 1
+
+        assert isinstance(Plain, CompositeEnumMeta)
+
+    def test_empty_source_enum(self):
+        class Empty(Enum):
+            pass
+
+        class Target(CompositeEnum, includes=Empty):
+            X = 1
+
+        assert len(Target) == 1
+        assert Target.X.value == 1
+
+    def test_composite_with_no_own_members(self):
+        class Target(CompositeEnum, includes=Operator):
+            pass
+
+        assert len(Target) == 4
+        assert Target.UNION.value == "|"
+
 
 class TestIncludesAsSequence:
     def test_list_includes(self):
@@ -234,31 +267,55 @@ class TestIncludesAsSequence:
         assert result == (Operator,)
 
 
-class TestNameConflicts:
-    def test_conflict_between_sources_raises(self):
-        class A(Enum):
-            X = 1
+class TestNestedComposition:
+    def setup_method(self):
+        class Base(CompositeEnum, includes=Operator):
+            IDENT = "IDENT"
 
-        class B(Enum):
-            X = 2
+        class Extended(CompositeEnum, includes=Base):
+            EXTRA = "extra"
 
-        with pytest.raises(ValueError, match="Name 'X' exists in both A and B"):
+        self.Base = Base
+        self.Extended = Extended
 
-            class Bad(CompositeEnum, includes=(A, B)):
-                pass
+    def test_all_members_transfer(self):
+        names = [m.name for m in self.Extended]
+        assert names == ["UNION", "INTERSECT", "DIFF", "SYM_DIFF", "IDENT", "EXTRA"]
 
-    def test_conflict_between_source_and_body_raises(self):
-        with pytest.raises(TypeError, match="already defined"):
+    def test_source_enum_points_to_immediate_source(self):
+        assert self.Extended.UNION.source_enum is self.Base
+        assert self.Extended.IDENT.source_enum is self.Base
+        assert self.Extended.EXTRA.source_enum is None
 
-            class Bad(CompositeEnum, includes=Operator):
-                UNION = "something_else"
+    def test_to_source_returns_immediate_source_member(self):
+        result = self.Extended.UNION.to_source()
+        assert result is self.Base.UNION
+        assert type(result) is self.Base
+
+    def test_chaining_to_source_reaches_original(self):
+        base_member = self.Extended.UNION.to_source()
+        assert base_member is not None
+        original = base_member.to_source()
+        assert original is Operator.UNION
+
+    def test_from_source_with_nested(self):
+        assert self.Extended.from_source(self.Base.UNION) is self.Extended.UNION
+        assert (
+            self.Extended.from_source(Operator.UNION) is None
+        )  # not the immediate source
 
 
-class TestTypeValidation:
+class TestValidation:
     def test_non_enum_in_includes_raises(self):
         with pytest.raises(TypeError, match="includes expects Enum types"):
 
             class Bad(CompositeEnum, includes=str):
+                X = 1
+
+    def test_string_includes_raises(self):
+        with pytest.raises(TypeError, match="includes expects Enum types"):
+
+            class Bad(CompositeEnum, includes="Operator"):
                 X = 1
 
     def test_int_values_into_str_target_raises(self):
@@ -289,16 +346,24 @@ class TestTypeValidation:
         assert Target.EXTRA.value == "extra"
         assert len(Target) == 8  # 3 from IntOp + 4 from Operator + 1 own
 
+    def test_conflict_between_sources_raises(self):
+        class A(Enum):
+            X = 1
 
-class TestStringIncludes:
-    def test_string_includes_raises(self):
-        with pytest.raises(TypeError, match="includes expects Enum types"):
+        class B(Enum):
+            X = 2
 
-            class Bad(CompositeEnum, includes="Operator"):
-                X = 1
+        with pytest.raises(ValueError, match="Name 'X' exists in both A and B"):
 
+            class Bad(CompositeEnum, includes=(A, B)):
+                pass
 
-class TestDuplicateSource:
+    def test_conflict_between_source_and_body_raises(self):
+        with pytest.raises(TypeError, match="'UNION'"):
+
+            class Bad(CompositeEnum, includes=Operator):
+                UNION = "something_else"
+
     def test_duplicate_source_raises(self):
         with pytest.raises(
             TypeError, match="duplicate source enum in includes: Operator"
@@ -315,8 +380,30 @@ class TestDuplicateSource:
             class Bad(CompositeEnum, includes=(Operator, Priority, Operator)):
                 EXTRA = "extra"
 
+    def test_flag_source_raises(self):
+        from enum import Flag
 
-class TestReservedNames:
+        class Perms(Flag):
+            READ = 1
+            WRITE = 2
+
+        with pytest.raises(TypeError, match="Flag enum"):
+
+            class Bad(CompositeEnum, includes=Perms):
+                OTHER = 4
+
+    def test_intflag_source_raises(self):
+        from enum import IntFlag
+
+        class Perms(IntFlag):
+            READ = 1
+            WRITE = 2
+
+        with pytest.raises(TypeError, match="Flag enum"):
+
+            class Bad(CompositeEnum, includes=Perms):
+                OTHER = 4
+
     @pytest.mark.parametrize("name", sorted(_RESERVED_NAMES))
     def test_reserved_name_in_body_raises(self, name):
         with pytest.raises(
@@ -340,20 +427,6 @@ class TestReservedNames:
             SOURCE = "src"
 
         assert Ok.SOURCE.value == "src"
-
-
-class TestFlagRejection:
-    def test_flag_source_raises(self):
-        from enum import Flag
-
-        class Perms(Flag):
-            READ = 1
-            WRITE = 2
-
-        with pytest.raises(TypeError, match="Flag enum"):
-
-            class Bad(CompositeEnum, includes=Perms):
-                OTHER = 4
 
 
 class TestIntEnum:
@@ -474,7 +547,7 @@ class TestPreMixinPattern:
         assert TokenType.UNION == "|"
 
 
-class TestAutoInSource:
+class TestAuto:
     def test_auto_values_resolved_before_inclusion(self):
         from enum import auto
 
@@ -490,6 +563,184 @@ class TestAutoInSource:
         assert Target.B.value == 2
         assert Target.C.value == 3
         assert Target.D.value == 100
+
+    def test_auto_in_target_with_single_source(self):
+        from enum import auto
+
+        class Source(Enum):
+            A = 1
+            B = 2
+
+        class Target(CompositeEnum, includes=Source):
+            C = auto()
+
+        assert Target.C.value == 3
+        assert len(Target) == 3
+
+    def test_auto_in_target_with_multiple_sources(self):
+        from enum import auto
+
+        class S1(Enum):
+            A = 1
+            B = 2
+
+        class S2(Enum):
+            C = 3
+            D = 4
+
+        class Target(CompositeEnum, includes=(S1, S2)):
+            E = auto()
+            F = auto()
+
+        assert Target.E.value == 5
+        assert Target.F.value == 6
+        assert len(Target) == 6
+
+    def test_all_auto_everywhere_no_overlap(self):
+        from enum import auto
+
+        class S1(Enum):
+            A = auto()
+            B = auto()
+
+        class S2(Enum):
+            C = 10
+            D = 11
+
+        class Target(CompositeEnum, includes=(S1, S2)):
+            E = auto()
+            F = auto()
+
+        assert Target.A.value == 1
+        assert Target.B.value == 2
+        assert Target.C.value == 10
+        assert Target.D.value == 11
+        assert Target.E.value == 12
+        assert Target.F.value == 13
+        assert len(Target) == 6
+
+    def test_all_auto_sources_with_overlapping_values_create_aliases(self):
+        from enum import auto
+
+        class S1(Enum):
+            A = auto()
+            B = auto()
+
+        class S2(Enum):
+            C = auto()  # 1 again — aliases S1.A
+            D = auto()  # 2 again — aliases S1.B
+
+        class Target(CompositeEnum, includes=(S1, S2)):
+            E = auto()
+
+        assert Target.C is Target.A  # alias
+        assert Target.D is Target.B  # alias
+        assert Target.E.value == 3
+        assert len(Target) == 3  # A, B, E (C and D are aliases)
+
+    def test_auto_with_gap_in_source(self):
+        from enum import auto
+
+        class Source(Enum):
+            A = 1
+            B = 10
+
+        class Target(CompositeEnum, includes=Source):
+            C = auto()
+
+        assert Target.C.value == 11
+
+
+class TestSourceMethodsNotTransferred:
+    def test_source_method_not_on_composite(self):
+        class Source(Enum):
+            X = 1
+
+            def custom(self):
+                return "hello"
+
+        class Target(CompositeEnum, includes=Source):
+            Y = 2
+
+        assert Source.X.custom() == "hello"
+        assert not hasattr(Target.X, "custom")
+
+    def test_source_property_not_on_composite(self):
+        class Source(Enum):
+            X = 1
+
+            @property
+            def label(self):
+                return f"label-{self.name}"
+
+        class Target(CompositeEnum, includes=Source):
+            Y = 2
+
+        assert Source.X.label == "label-X"
+        assert not hasattr(Target.X, "label")
+
+    def test_source_dunder_str_not_on_composite(self):
+        class Source(Enum):
+            X = 1
+
+            def __str__(self):
+                return f"custom:{self.name}"
+
+        class Target(CompositeEnum, includes=Source):
+            Y = 2
+
+        assert str(Source.X) == "custom:X"
+        assert str(Target.X) != "custom:X"
+
+
+class TestAliases:
+    def test_source_alias_transferred(self):
+        class Source(Enum):
+            PRIMARY = 1
+            ALIAS = 1  # noqa: PIE796
+
+        class Target(CompositeEnum, includes=Source):
+            EXTRA = "extra"
+
+        assert Target.PRIMARY.value == 1
+        assert Target["ALIAS"] is Target.PRIMARY
+        assert len(Target) == 2  # PRIMARY + EXTRA (ALIAS is alias, not counted)
+
+    def test_alias_in_source_map(self):
+        class Source(Enum):
+            PRIMARY = 1
+            ALIAS = 1  # noqa: PIE796
+
+        class Target(CompositeEnum, includes=Source):
+            EXTRA = "extra"
+
+        assert Target.PRIMARY.source_enum is Source
+        assert "ALIAS" in Target.__members__
+
+    def test_alias_to_source_resolves(self):
+        class Source(Enum):
+            PRIMARY = 1
+            ALIAS = 1  # noqa: PIE796
+
+        class Target(CompositeEnum, includes=Source):
+            EXTRA = "extra"
+
+        alias = Target["ALIAS"]
+        assert alias.to_source() is Source.PRIMARY
+
+    def test_same_value_across_sources_creates_alias(self):
+        class A(Enum):
+            X = 1
+
+        class B(Enum):
+            Y = 1  # same value as A.X
+
+        class Combined(CompositeEnum, includes=(A, B)):
+            Z = 2
+
+        assert Combined.X.value == 1
+        assert Combined.Y is Combined.X  # Y is an alias
+        assert len(Combined) == 2  # X and Z (Y is alias, not counted)
 
 
 class _PickleTokenType(CompositeEnum, includes=Operator):
@@ -511,77 +762,51 @@ class TestCopyDeepcopy:
         assert copy.deepcopy(_PickleTokenType.UNION) is _PickleTokenType.UNION
 
 
-class TestValueAliases:
-    def test_same_value_across_sources_creates_alias(self):
-        class A(Enum):
-            X = 1
-
-        class B(Enum):
-            Y = 1  # same value as A.X
-
-        class Combined(CompositeEnum, includes=(A, B)):
-            Z = 2
-
-        assert Combined.X.value == 1
-        assert Combined.Y is Combined.X  # Y is an alias
-        assert len(Combined) == 2  # X and Z (Y is alias, not counted)
-
-
-class TestEdgeCases:
-    def test_empty_source_enum(self):
-        class Empty(Enum):
-            pass
-
-        class Target(CompositeEnum, includes=Empty):
-            X = 1
-
-        assert len(Target) == 1
-        assert Target.X.value == 1
-
-    def test_composite_with_no_own_members(self):
-        class Target(CompositeEnum, includes=Operator):
-            pass
-
-        assert len(Target) == 4
-        assert Target.UNION.value == "|"
-
-
-class TestNestedComposition:
+@pytest.mark.skipif(
+    sys.version_info < (3, 10),
+    reason="match/case requires Python 3.10+",
+)
+class TestMatchCase:
     def setup_method(self):
-        class Base(CompositeEnum, includes=Operator):
+        class TokenType(CompositeEnum, includes=Operator):
             IDENT = "IDENT"
 
-        class Extended(CompositeEnum, includes=Base):
-            EXTRA = "extra"
+        self.TokenType = TokenType
 
-        self.Base = Base
-        self.Extended = Extended
+    def test_match_included_member(self):
+        match self.TokenType.UNION:
+            case self.TokenType.UNION:
+                result = "matched"
+            case _:
+                result = "no match"
 
-    def test_all_members_transfer(self):
-        names = [m.name for m in self.Extended]
-        assert names == ["UNION", "INTERSECT", "DIFF", "SYM_DIFF", "IDENT", "EXTRA"]
+        assert result == "matched"
 
-    def test_source_enum_points_to_immediate_source(self):
-        assert self.Extended.UNION.source_enum is self.Base
-        assert self.Extended.IDENT.source_enum is self.Base
-        assert self.Extended.EXTRA.source_enum is None
+    def test_match_own_member(self):
+        match self.TokenType.IDENT:
+            case self.TokenType.IDENT:
+                result = "matched"
+            case _:
+                result = "no match"
 
-    def test_to_source_returns_immediate_source_member(self):
-        result = self.Extended.UNION.to_source()
-        assert result is self.Base.UNION
-        assert type(result) is self.Base
+        assert result == "matched"
 
-    def test_chaining_to_source_reaches_original(self):
-        base_member = self.Extended.UNION.to_source()
-        assert base_member is not None
-        original = base_member.to_source()
-        assert original is Operator.UNION
 
-    def test_from_source_with_nested(self):
-        assert self.Extended.from_source(self.Base.UNION) is self.Extended.UNION
-        assert (
-            self.Extended.from_source(Operator.UNION) is None
-        )  # not the immediate source
+class TestReprStr:
+    def setup_method(self):
+        class TokenType(CompositeEnum, includes=Operator):
+            IDENT = "IDENT"
+
+        self.TokenType = TokenType
+
+    def test_repr_included_member(self):
+        assert repr(self.TokenType.UNION) == "<TokenType.UNION: '|'>"
+
+    def test_repr_own_member(self):
+        assert repr(self.TokenType.IDENT) == "<TokenType.IDENT: 'IDENT'>"
+
+    def test_str_is_member_value(self):
+        assert str(self.TokenType.UNION) == "TokenType.UNION"
 
 
 class TestSetifyUseCase:
@@ -634,73 +859,3 @@ class TestSetifyUseCase:
             "LPAREN",
             "RPAREN",
         ]
-
-
-class TestAliasTransfer:
-    def setup_method(self):
-        class Source(Enum):
-            PRIMARY = 1
-            ALIAS = 1  # noqa: PIE796
-
-        class Target(CompositeEnum, includes=Source):
-            EXTRA = "extra"
-
-        self.Source = Source
-        self.Target = Target
-
-    def test_source_alias_not_transferred(self):
-        assert self.Target.PRIMARY.value == 1
-        assert len(self.Target) == 2  # PRIMARY + EXTRA, not ALIAS
-        with pytest.raises(KeyError):
-            self.Target["ALIAS"]
-
-    def test_source_alias_not_in_source_map(self):
-        assert self.Target.PRIMARY.source_enum is self.Source
-        assert "ALIAS" not in self.Target.__members__
-
-
-@pytest.mark.skipif(
-    sys.version_info < (3, 10),
-    reason="match/case requires Python 3.10+",
-)
-class TestMatchCase:
-    def setup_method(self):
-        class TokenType(CompositeEnum, includes=Operator):
-            IDENT = "IDENT"
-
-        self.TokenType = TokenType
-
-    def test_match_included_member(self):
-        match self.TokenType.UNION:
-            case self.TokenType.UNION:
-                result = "matched"
-            case _:
-                result = "no match"
-
-        assert result == "matched"
-
-    def test_match_own_member(self):
-        match self.TokenType.IDENT:
-            case self.TokenType.IDENT:
-                result = "matched"
-            case _:
-                result = "no match"
-
-        assert result == "matched"
-
-
-class TestReprStr:
-    def setup_method(self):
-        class TokenType(CompositeEnum, includes=Operator):
-            IDENT = "IDENT"
-
-        self.TokenType = TokenType
-
-    def test_repr_included_member(self):
-        assert repr(self.TokenType.UNION) == "<TokenType.UNION: '|'>"
-
-    def test_repr_own_member(self):
-        assert repr(self.TokenType.IDENT) == "<TokenType.IDENT: 'IDENT'>"
-
-    def test_str_is_member_value(self):
-        assert str(self.TokenType.UNION) == "TokenType.UNION"
