@@ -80,7 +80,7 @@ def _to_source(self: Enum) -> Enum | None:
     source: type[Enum] | None = source_map.get(self.name)
     if source is None:
         return None
-    return source(self.value)
+    return source[self.name]
 
 
 class CompositeEnumMeta(EnumMeta):
