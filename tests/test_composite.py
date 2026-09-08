@@ -626,3 +626,73 @@ class TestSetifyUseCase:
             "LPAREN",
             "RPAREN",
         ]
+
+
+class TestAliasTransfer:
+    def setup_method(self):
+        class Source(Enum):
+            PRIMARY = 1
+            ALIAS = 1  # noqa: PIE796
+
+        class Target(CompositeEnum, includes=Source):
+            EXTRA = "extra"
+
+        self.Source = Source
+        self.Target = Target
+
+    def test_source_alias_not_transferred(self):
+        assert self.Target.PRIMARY.value == 1
+        assert len(self.Target) == 2  # PRIMARY + EXTRA, not ALIAS
+        with pytest.raises(KeyError):
+            self.Target["ALIAS"]
+
+    def test_source_alias_not_in_source_map(self):
+        assert self.Target.PRIMARY.source_enum is self.Source
+        assert "ALIAS" not in self.Target.__members__
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 10),
+    reason="match/case requires Python 3.10+",
+)
+class TestMatchCase:
+    def setup_method(self):
+        class TokenType(CompositeEnum, includes=Operator):
+            IDENT = "IDENT"
+
+        self.TokenType = TokenType
+
+    def test_match_included_member(self):
+        match self.TokenType.UNION:
+            case self.TokenType.UNION:
+                result = "matched"
+            case _:
+                result = "no match"
+
+        assert result == "matched"
+
+    def test_match_own_member(self):
+        match self.TokenType.IDENT:
+            case self.TokenType.IDENT:
+                result = "matched"
+            case _:
+                result = "no match"
+
+        assert result == "matched"
+
+
+class TestReprStr:
+    def setup_method(self):
+        class TokenType(CompositeEnum, includes=Operator):
+            IDENT = "IDENT"
+
+        self.TokenType = TokenType
+
+    def test_repr_included_member(self):
+        assert repr(self.TokenType.UNION) == "<TokenType.UNION: '|'>"
+
+    def test_repr_own_member(self):
+        assert repr(self.TokenType.IDENT) == "<TokenType.IDENT: 'IDENT'>"
+
+    def test_str_is_member_value(self):
+        assert str(self.TokenType.UNION) == "TokenType.UNION"
