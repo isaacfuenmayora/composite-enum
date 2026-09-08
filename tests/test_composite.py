@@ -33,6 +33,19 @@ class IntOp(IntEnum):
     MUL = 3
 
 
+class TestPublicAPI:
+    def test_all_exports(self):
+        import composite_enum
+
+        assert set(composite_enum.__all__) == {"CompositeEnum", "CompositeEnumMeta"}
+
+    def test_version_is_string(self):
+        import composite_enum
+
+        assert isinstance(composite_enum.__version__, str)
+        assert "." in composite_enum.__version__
+
+
 class TestSingleSource:
     """Tests for composing from a single source enum."""
 
@@ -110,6 +123,13 @@ class TestSingleSource:
     def test_name_lookup(self):
         assert self.TokenType["UNION"] is self.TokenType.UNION
 
+    @pytest.mark.parametrize(
+        "method",
+        ["included_enums", "includes_enum", "members_from", "from_source"],
+    )
+    def test_metaclass_method_not_on_instance(self, method):
+        assert not hasattr(self.TokenType.UNION, method)
+
 
 class TestMultipleSources:
     """Tests for composing from multiple source enums."""
@@ -173,6 +193,116 @@ class TestMultipleSources:
 
     def test_included_enums_returns_sources_in_order(self):
         assert self.Combined.included_enums() == (Operator, Priority)
+
+
+class TestMembersFrom:
+    """Thorough tests for members_from, including cached-result correctness."""
+
+    def test_returns_frozenset(self):
+        class T(CompositeEnum, includes=Operator):
+            IDENT = "IDENT"
+
+        result = T.members_from(Operator)
+        assert isinstance(result, frozenset)
+
+    def test_repeated_calls_return_same_result(self):
+        class T(CompositeEnum, includes=Operator):
+            IDENT = "IDENT"
+
+        first = T.members_from(Operator)
+        second = T.members_from(Operator)
+        assert first == second
+        assert first is second  # cached (same object)
+
+    def test_different_sources_cached_independently(self):
+        class T(CompositeEnum, includes=(Operator, Priority)):
+            EXTRA = "extra"
+
+        ops = T.members_from(Operator)
+        pris = T.members_from(Priority)
+        assert ops != pris
+        assert len(ops) == 4
+        assert len(pris) == 3
+
+        # calling again returns the same cached objects
+        assert T.members_from(Operator) is ops
+        assert T.members_from(Priority) is pris
+
+    def test_unknown_source_returns_empty_frozenset(self):
+        class T(CompositeEnum, includes=Operator):
+            IDENT = "IDENT"
+
+        class Unrelated(Enum):
+            X = 1
+
+        result = T.members_from(Unrelated)
+        assert result == frozenset()
+
+    def test_no_includes_returns_empty(self):
+        class T(CompositeEnum):
+            A = 1
+
+        assert T.members_from(Operator) == frozenset()
+
+    def test_separate_composites_have_independent_caches(self):
+        class T1(CompositeEnum, includes=Operator):
+            IDENT = "IDENT"
+
+        class T2(CompositeEnum, includes=Operator):
+            OTHER = "other"
+
+        r1 = T1.members_from(Operator)
+        r2 = T2.members_from(Operator)
+        assert r1 != r2  # different enum members
+        assert all(isinstance(m, T1) for m in r1)
+        assert all(isinstance(m, T2) for m in r2)
+
+    def test_cross_source_alias_returns_canonical(self):
+        class A(Enum):
+            X = 1
+
+        class B(Enum):
+            Y = 1  # same value (alias)
+
+        class T(CompositeEnum, includes=(A, B)):
+            Z = 2
+
+        # Both sources yield the canonical member
+        a_members = T.members_from(A)
+        b_members = T.members_from(B)
+        assert a_members == frozenset({T.X})
+        assert b_members == frozenset({T.X})
+
+    def test_source_side_alias_not_double_counted(self):
+        class Source(Enum):
+            PRIMARY = 1
+            ALIAS = 1
+
+        class T(CompositeEnum, includes=Source):
+            EXTRA = "extra"
+
+        members = T.members_from(Source)
+        assert len(members) == 1
+        assert T.PRIMARY in members
+
+    def test_nested_composite_members_from(self):
+        class Base(CompositeEnum, includes=Operator):
+            IDENT = "IDENT"
+
+        class Extended(CompositeEnum, includes=Base):
+            EXTRA = "extra"
+
+        # Extended's source is Base, not Operator
+        assert Extended.members_from(Base) == frozenset(
+            {
+                Extended.UNION,
+                Extended.INTERSECT,
+                Extended.DIFF,
+                Extended.SYM_DIFF,
+                Extended.IDENT,
+            }
+        )
+        assert Extended.members_from(Operator) == frozenset()
 
 
 class TestNoIncludes:
@@ -324,6 +454,21 @@ class TestValidation:
             class Bad(CompositeEnum, includes="Operator"):
                 X = 1
 
+    def test_none_includes_raises(self):
+        with pytest.raises(TypeError, match="includes expects Enum types"):
+
+            class Bad(CompositeEnum, includes=None):
+                X = 1
+
+    def test_generator_includes_raises(self):
+        class A(Enum):
+            X = 1
+
+        with pytest.raises(TypeError, match="includes expects Enum types"):
+
+            class Bad(CompositeEnum, includes=(e for e in [A])):
+                Y = 2
+
     def test_int_values_into_str_target_raises(self):
         with pytest.raises(TypeError, match="requires str values"):
 
@@ -434,6 +579,13 @@ class TestValidation:
 
         assert Ok.SOURCE.value == "src"
 
+    def test_source_map_is_immutable(self):
+        class TokenType(CompositeEnum, includes=Operator):
+            IDENT = "IDENT"
+
+        with pytest.raises(TypeError):
+            TokenType._composite_source_map_["FAKE"] = Operator  # type: ignore[index]
+
 
 class TestIntEnum:
     def setup_method(self):
@@ -484,7 +636,7 @@ class TestStrEnum:
             PLUS = "+"
             MINUS = "-"
 
-        class Extended(StrEnum, metaclass=CompositeEnumMeta, includes=StrOp):
+        class Extended(StrEnum, metaclass=CompositeEnumMeta, includes=StrOp):  # type: ignore[call-arg]
             STAR = "*"
             SLASH = "/"
 
@@ -499,7 +651,7 @@ class TestStrEnum:
     def test_plain_enum_str_values_into_strenum(self):
         from enum import StrEnum
 
-        class TokenType(StrEnum, metaclass=CompositeEnumMeta, includes=Operator):
+        class TokenType(StrEnum, metaclass=CompositeEnumMeta, includes=Operator):  # type: ignore[call-arg]
             IDENT = "IDENT"
 
         assert isinstance(TokenType.UNION, str)
@@ -559,6 +711,28 @@ class TestMixinPattern:
         assert Signal.LOW == 3.3
         assert Signal.GROUND == 0.0
         assert Signal.LOW.source_enum is Voltage
+
+    def test_bytes_enum_mixin(self):
+        class ByteSource(Enum):
+            HELLO = b"hello"
+            WORLD = b"world"
+
+        class ByteTarget(bytes, Enum, metaclass=CompositeEnumMeta, includes=ByteSource):
+            EXTRA = b"extra"
+
+        assert isinstance(ByteTarget.HELLO, bytes)
+        assert ByteTarget.HELLO.value == b"hello"
+        assert ByteTarget.HELLO.source_enum is ByteSource
+        assert ByteTarget.EXTRA.source_enum is None
+
+    def test_bytes_type_mismatch_rejected(self):
+        class StrSource(Enum):
+            X = "hello"
+
+        with pytest.raises(TypeError, match="requires bytes values"):
+
+            class Bad(bytes, Enum, metaclass=CompositeEnumMeta, includes=StrSource):
+                Y = b"world"
 
 
 class TestAuto:
@@ -641,8 +815,8 @@ class TestAuto:
             B = auto()
 
         class S2(Enum):
-            C = auto()  # 1 again — aliases S1.A
-            D = auto()  # 2 again — aliases S1.B
+            C = auto()  # 1 again (aliases S1.A)
+            D = auto()  # 2 again (aliases S1.B)
 
         class Target(CompositeEnum, includes=(S1, S2)):
             E = auto()
