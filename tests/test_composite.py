@@ -84,6 +84,12 @@ class TestSingleSource:
     def test_from_source_returns_none_for_non_included_enum(self):
         assert self.TokenType.from_source(Priority.LOW) is None
 
+    def test_from_source_returns_none_for_same_name_different_enum(self):
+        class Unrelated(Enum):
+            UNION = "different"
+
+        assert self.TokenType.from_source(Unrelated.UNION) is None
+
     def test_composite_member_is_not_source_instance(self):
         assert isinstance(self.TokenType.UNION, self.TokenType)
         assert not isinstance(self.TokenType.UNION, Operator)
@@ -321,7 +327,7 @@ class TestValidation:
     def test_int_values_into_str_target_raises(self):
         with pytest.raises(TypeError, match="requires str values"):
 
-            class Bad(str, Enum, metaclass=CompositeEnumMeta, includes=IntOp):
+            class Bad(str, Enum, metaclass=CompositeEnumMeta, includes=IntOp):  # noqa: UP042
                 X = "x"
 
     def test_str_values_into_int_target_raises(self):
@@ -430,33 +436,40 @@ class TestValidation:
 
 
 class TestIntEnum:
-    def test_int_source_into_int_target(self):
+    def setup_method(self):
         class Extended(IntEnum, metaclass=CompositeEnumMeta, includes=IntOp):
             DIV = 4
             MOD = 5
 
-        assert Extended.ADD.value == 1
-        assert Extended.DIV.value == 4
-        assert isinstance(Extended.ADD, int)
+        self.Extended = Extended
+
+    def test_int_source_into_int_target(self):
+        assert self.Extended.ADD.value == 1
+        assert self.Extended.DIV.value == 4
+        assert isinstance(self.Extended.ADD, int)
 
     def test_to_source_with_int(self):
-        class Extended(IntEnum, metaclass=CompositeEnumMeta, includes=IntOp):
-            DIV = 4
-
-        assert Extended.ADD.to_source() is IntOp.ADD
+        assert self.Extended.ADD.to_source() is IntOp.ADD
 
     def test_from_source_with_int(self):
-        class Extended(IntEnum, metaclass=CompositeEnumMeta, includes=IntOp):
-            DIV = 4
-
-        assert Extended.from_source(IntOp.ADD) is Extended.ADD
+        assert self.Extended.from_source(IntOp.ADD) is self.Extended.ADD
 
     def test_source_enum_with_int(self):
-        class Extended(IntEnum, metaclass=CompositeEnumMeta, includes=IntOp):
-            DIV = 4
+        assert self.Extended.ADD.source_enum is IntOp
+        assert self.Extended.DIV.source_enum is None
 
-        assert Extended.ADD.source_enum is IntOp
-        assert Extended.DIV.source_enum is None
+    def test_included_enums_with_int(self):
+        assert self.Extended.included_enums() == (IntOp,)
+
+    def test_includes_enum_with_int(self):
+        assert self.Extended.includes_enum(IntOp) is True
+        assert self.Extended.includes_enum(Operator) is False
+
+    def test_members_from_with_int(self):
+        members = self.Extended.members_from(IntOp)
+        assert members == frozenset(
+            {self.Extended.ADD, self.Extended.SUB, self.Extended.MUL}
+        )
 
 
 @pytest.mark.skipif(
@@ -464,7 +477,7 @@ class TestIntEnum:
     reason="StrEnum requires Python 3.11+",
 )
 class TestStrEnum:
-    def test_str_source_into_strenum_target(self):
+    def setup_method(self):
         from enum import StrEnum
 
         class StrOp(StrEnum):
@@ -475,9 +488,13 @@ class TestStrEnum:
             STAR = "*"
             SLASH = "/"
 
-        assert Extended.PLUS.value == "+"
-        assert Extended.STAR.value == "*"
-        assert isinstance(Extended.PLUS, str)
+        self.StrOp = StrOp
+        self.Extended = Extended
+
+    def test_str_source_into_strenum_target(self):
+        assert self.Extended.PLUS.value == "+"
+        assert self.Extended.STAR.value == "*"
+        assert isinstance(self.Extended.PLUS, str)
 
     def test_plain_enum_str_values_into_strenum(self):
         from enum import StrEnum
@@ -489,28 +506,10 @@ class TestStrEnum:
         assert TokenType.UNION == "|"
 
     def test_to_source_with_strenum(self):
-        from enum import StrEnum
-
-        class StrOp(StrEnum):
-            PLUS = "+"
-            MINUS = "-"
-
-        class Extended(StrEnum, metaclass=CompositeEnumMeta, includes=StrOp):
-            STAR = "*"
-
-        assert Extended.PLUS.to_source() is StrOp.PLUS
+        assert self.Extended.PLUS.to_source() is self.StrOp.PLUS
 
     def test_from_source_with_strenum(self):
-        from enum import StrEnum
-
-        class StrOp(StrEnum):
-            PLUS = "+"
-            MINUS = "-"
-
-        class Extended(StrEnum, metaclass=CompositeEnumMeta, includes=StrOp):
-            STAR = "*"
-
-        assert Extended.from_source(StrOp.PLUS) is Extended.PLUS
+        assert self.Extended.from_source(self.StrOp.PLUS) is self.Extended.PLUS
 
     def test_strenum_source_into_plain_enum(self):
         from enum import StrEnum
@@ -525,26 +524,41 @@ class TestStrEnum:
         assert Target.EXTRA.value == "extra"
 
     def test_source_enum_with_strenum(self):
-        from enum import StrEnum
+        assert self.Extended.PLUS.source_enum is self.StrOp
+        assert self.Extended.STAR.source_enum is None
 
-        class StrOp(StrEnum):
-            PLUS = "+"
-            MINUS = "-"
+    def test_included_enums_with_strenum(self):
+        assert self.Extended.included_enums() == (self.StrOp,)
 
-        class Extended(StrEnum, metaclass=CompositeEnumMeta, includes=StrOp):
-            STAR = "*"
+    def test_includes_enum_with_strenum(self):
+        assert self.Extended.includes_enum(self.StrOp) is True
+        assert self.Extended.includes_enum(Operator) is False
 
-        assert Extended.PLUS.source_enum is StrOp
-        assert Extended.STAR.source_enum is None
+    def test_members_from_with_strenum(self):
+        members = self.Extended.members_from(self.StrOp)
+        assert members == frozenset({self.Extended.PLUS, self.Extended.MINUS})
 
 
-class TestPreMixinPattern:
-    def test_str_enum_mixin_pre311(self):
-        class TokenType(str, Enum, metaclass=CompositeEnumMeta, includes=Operator):
+class TestMixinPattern:
+    def test_str_enum_mixin(self):
+        class TokenType(str, Enum, metaclass=CompositeEnumMeta, includes=Operator):  # noqa: UP042
             IDENT = "IDENT"
 
         assert isinstance(TokenType.UNION, str)
         assert TokenType.UNION == "|"
+
+    def test_float_enum_mixin(self):
+        class Voltage(Enum):
+            LOW = 3.3
+            HIGH = 5.0
+
+        class Signal(float, Enum, metaclass=CompositeEnumMeta, includes=Voltage):
+            GROUND = 0.0
+
+        assert isinstance(Signal.LOW, float)
+        assert Signal.LOW == 3.3
+        assert Signal.GROUND == 0.0
+        assert Signal.LOW.source_enum is Voltage
 
 
 class TestAuto:
@@ -781,10 +795,6 @@ class TestCopyDeepcopy:
         assert copy.deepcopy(_PickleTokenType.UNION) is _PickleTokenType.UNION
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 10),
-    reason="match/case requires Python 3.10+",
-)
 class TestMatchCase:
     def setup_method(self):
         class TokenType(CompositeEnum, includes=Operator):
