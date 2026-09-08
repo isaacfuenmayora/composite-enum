@@ -33,7 +33,7 @@ TokenType["UNION"]       # <TokenType.UNION: '|'>
 
 # But they know where they came from
 TokenType.UNION.source_enum                 # <enum 'Operator'>
-TokenType.to_source(TokenType.UNION)        # <Operator.UNION: '|'>
+TokenType.UNION.to_source()                 # <Operator.UNION: '|'>
 TokenType.from_source(Operator.UNION)       # <TokenType.UNION: '|'>
 TokenType.IDENT.source_enum                 # None (defined directly)
 TokenType.members_from(Operator)            # frozenset({UNION, INTERSECT, DIFF, SYM_DIFF})
@@ -147,6 +147,11 @@ class TokenType(str, Enum, metaclass=CompositeEnumMeta, includes=Operator):
 The same metaclass approach works for any data type mixin, not just
 `str` and `int` (e.g. `float, Enum` or a custom type).
 
+> **Note:** Type checkers may flag the `includes` keyword when using
+> `metaclass=CompositeEnumMeta` directly, since they don't infer class
+> keywords from metaclass signatures. Add `# type: ignore[call-arg]`
+> to suppress this. The keyword works correctly at runtime.
+
 ### Nested composition
 
 Composing from an already-composite enum works. `source_enum` points
@@ -191,15 +196,24 @@ TokenType.IDENT.source_enum  # None
 
 The source enum this member was included from, or `None`.
 
-#### `cls.to_source(member)` / `cls.from_source(member)`
+#### `member.to_source()`
 
 ```python
-TokenType.to_source(TokenType.UNION)  # Operator.UNION
+TokenType.UNION.to_source()  # Operator.UNION
+TokenType.IDENT.to_source()  # None
+```
+
+Convert a composite member back to its source enum member. Returns
+`None` for members defined directly on the composite.
+
+#### `cls.from_source(member)`
+
+```python
 TokenType.from_source(Operator.UNION) # TokenType.UNION
 ```
 
-Convert between composite and source members. Returns `None`
-when there's no match.
+Convert a source enum member to its composite equivalent. Returns
+`None` when there's no match.
 
 #### `cls.members_from(source)`
 
@@ -248,29 +262,35 @@ Source enums (the ones in `includes`) can be any `Enum`, `StrEnum`, or
 `_EnumDict.__setitem__`, which is an implementation detail of CPython's
 enum module. It's been stable since Python 3.6 and is unlikely to
 change, but it's not a guaranteed public API. Tested on 3.10 through
-3.14.
+3.15.
 
-**Member name shadowing.** If you name a member `included_enums`,
-`members_from`, `to_source`, `from_source`, or `includes_enum`, it
-shadows the corresponding metaclass method. Don't do that.
+**Reserved member names.** The names `source_enum`, `included_enums`,
+`includes_enum`, `members_from`, `to_source`, and `from_source` are
+reserved by the metaclass. Using any of them as a member name raises `TypeError` at class creation.
+
+**Source methods don't transfer.** Only member names and values are
+composed. Methods, properties, and custom `__init__` defined on a
+source enum are not carried over to the composite.
+
+**Source enum aliases are preserved.** If a source enum has aliases
+(multiple names for the same value), they transfer as aliases in the
+composite too:
+
+```python
+class Source(Enum):
+    PRIMARY = 1
+    ALIAS = 1  # alias of PRIMARY
+
+class Target(CompositeEnum, includes=Source):
+    EXTRA = "extra"
+
+Target.PRIMARY          # <Target.PRIMARY: 1>
+Target["ALIAS"]         # <Target.PRIMARY: 1> (alias, same as source)
+```
 
 **Value aliases.** If two included sources share a value (different
 name, same value), the second becomes an alias of the first. This is
 standard enum behavior, not composite-specific.
-
-**`auto()` in the target.** `auto()` numbering in the target doesn't
-account for included values, which can produce unintended aliases:
-
-```python
-class Source(Enum):
-    A = 1
-    B = 2
-
-class Target(CompositeEnum, includes=Source):
-    C = auto()  # also 1, becomes an alias of A
-```
-
-Use explicit values in the target body when composing.
 
 ## How It Works
 
