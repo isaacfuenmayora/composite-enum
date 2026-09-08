@@ -1,11 +1,21 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from enum import Enum, EnumMeta
-from typing import Any, Self
+from typing import Any
+
+from typing_extensions import Self
 
 class CompositeEnumMeta(EnumMeta):
-    _composite_source_map_: dict[str, type[Enum]]
+    _composite_source_map_: Mapping[str, type[Enum]]
     _composite_includes_: tuple[type[Enum], ...]
 
+    def __new__(
+        mcls,
+        name: str,
+        bases: tuple[type, ...],
+        namespace: dict[str, Any],
+        includes: type[Enum] | Sequence[type[Enum]] = (),
+        **kwds: Any,
+    ) -> CompositeEnumMeta: ...
     def included_enums(cls) -> tuple[type[Enum], ...]: ...
     def includes_enum(cls, source: type[Enum]) -> bool: ...
     def members_from(cls, source: type[Enum]) -> frozenset[Enum]: ...

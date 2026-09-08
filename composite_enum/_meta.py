@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from enum import Enum, EnumMeta, Flag
+from functools import cache
+from types import MappingProxyType
 from typing import Any
 
 
@@ -86,7 +88,7 @@ def _to_source(self: Enum) -> Enum | None:
 class CompositeEnumMeta(EnumMeta):
     """Metaclass that composes members from other enums into a new one."""
 
-    _composite_source_map_: dict[str, type[Enum]]
+    _composite_source_map_: Mapping[str, type[Enum]]
     _composite_includes_: tuple[type[Enum], ...]
 
     @classmethod
@@ -150,7 +152,7 @@ class CompositeEnumMeta(EnumMeta):
             for member_name in source.__members__:
                 source_map[member_name] = source
 
-        cls._composite_source_map_ = source_map
+        cls._composite_source_map_ = MappingProxyType(source_map)
         cls._composite_includes_ = includes
         cls.source_enum = property(_get_source_enum)  # type: ignore[attr-defined]
         cls.to_source = _to_source  # type: ignore[attr-defined]
@@ -164,6 +166,7 @@ class CompositeEnumMeta(EnumMeta):
         """Check if this composite includes members from *source*."""
         return source in cls.included_enums()
 
+    @cache
     def members_from(cls, source: type[Enum]) -> frozenset[Enum]:
         """Return the subset of members that originated from *source*."""
         source_map = getattr(cls, "_composite_source_map_", {})
