@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from enum import Enum, EnumMeta
 from typing import Any
 
@@ -11,6 +12,13 @@ class CompositeEnumMeta(EnumMeta):
     def from_source(cls, member: Enum) -> Enum | None: ...
 
 class CompositeEnum(Enum, metaclass=CompositeEnumMeta):
+    def __init_subclass__(
+        cls,
+        *,
+        includes: type[Enum] | Sequence[type[Enum]] = (),
+        **kwargs: Any,
+    ) -> None: ...
+
     @property
     def source_enum(self) -> type[Enum] | None: ...
     def to_source(self) -> Enum | None: ...
