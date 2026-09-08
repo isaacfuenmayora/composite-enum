@@ -1,5 +1,11 @@
 # composite-enum
 
+[![CI](https://github.com/isaacfuenmayora/composite-enum/actions/workflows/ci.yml/badge.svg)](https://github.com/isaacfuenmayora/composite-enum/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/composite-enum)](https://pypi.org/project/composite-enum/)
+[![Python](https://img.shields.io/pypi/pyversions/composite-enum)](https://pypi.org/project/composite-enum/)
+[![Checked with pyright](https://microsoft.github.io/pyright/img/pyright_badge.svg)](https://microsoft.github.io/pyright/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Build superset enums by composing members from other enums. Included
 members become real first-class members of the new enum, with introspection
 back to their origin.
@@ -139,7 +145,7 @@ The metaclass validates that included values match the target's data
 type. All introspection methods work the same either way.
 
 The same metaclass approach works for any data type mixin, not just
-`StrEnum` and `IntEnum` — use `(float, Enum)`, `(bytes, Enum)`, or
+`StrEnum` and `IntEnum`. Use `(float, Enum)`, `(bytes, Enum)`, or
 any custom type:
 
 ```python
@@ -170,7 +176,7 @@ isinstance(Signal.LOW, float)  # True
 >
 > Both work correctly at runtime regardless. Note that type checkers
 > cannot resolve dynamically injected member names (e.g.
-> `TokenType.UNION`) on either path — this is a general limitation of
+> `TokenType.UNION`) on either path. This is a general limitation of
 > enum metaclasses, not specific to `composite-enum`.
 
 ### Nested composition
@@ -331,10 +337,10 @@ class Combined(CompositeEnum, includes=(A, B)):
 
 Combined.Y                              # <Combined.X: 1> (Y is an alias)
 Combined.from_source(B.Y)               # <Combined.X: 1>
-Combined.from_source(B.Y).source_enum   # <enum 'A'> -- not B
-Combined.from_source(B.Y).to_source()   # <A.X: 1>   -- not B.Y
+Combined.from_source(B.Y).source_enum   # <enum 'A'> (not B)
+Combined.from_source(B.Y).to_source()   # <A.X: 1>   (not B.Y)
 Combined.members_from(A)                # frozenset({<Combined.X: 1>})
-Combined.members_from(B)                # frozenset({<Combined.X: 1>}) -- same member
+Combined.members_from(B)                # frozenset({<Combined.X: 1>}) (same member)
 ```
 
 Because `Y` is an alias for `X`, the canonical member's `source_enum`
