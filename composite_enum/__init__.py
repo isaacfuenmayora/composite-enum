@@ -8,7 +8,7 @@ Usage::
         UNION = "|"
         INTERSECT = "&"
 
-    class TokenType(CompositeEnum, includes=(Operator,)):
+    class TokenType(CompositeEnum, includes=Operator):
         IDENT = "IDENT"
         ASSIGN = "="
 
