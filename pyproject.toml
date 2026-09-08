@@ -23,11 +23,12 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Typing :: Typed",
 ]
 
 [dependency-groups]
-test = ["pytest >= 8.0"]
+dev = ["pytest >= 8.0"]
 
 [project.urls]
 Homepage = "https://github.com/isaacfuenmayora/composite-enum"
@@ -36,3 +37,9 @@ Issues = "https://github.com/isaacfuenmayora/composite-enum/issues"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

@@ -300,13 +300,17 @@ class TestStringIncludes:
 
 class TestDuplicateSource:
     def test_duplicate_source_raises(self):
-        with pytest.raises(TypeError, match="duplicate source enum in includes: Operator"):
+        with pytest.raises(
+            TypeError, match="duplicate source enum in includes: Operator"
+        ):
 
             class Bad(CompositeEnum, includes=(Operator, Operator)):
                 EXTRA = "extra"
 
     def test_duplicate_source_with_others_raises(self):
-        with pytest.raises(TypeError, match="duplicate source enum in includes: Operator"):
+        with pytest.raises(
+            TypeError, match="duplicate source enum in includes: Operator"
+        ):
 
             class Bad(CompositeEnum, includes=(Operator, Priority, Operator)):
                 EXTRA = "extra"
@@ -315,14 +319,18 @@ class TestDuplicateSource:
 class TestReservedNames:
     @pytest.mark.parametrize("name", sorted(_RESERVED_NAMES))
     def test_reserved_name_in_body_raises(self, name):
-        with pytest.raises(TypeError, match=f"'{name}' is reserved by CompositeEnumMeta"):
+        with pytest.raises(
+            TypeError, match=f"'{name}' is reserved by CompositeEnumMeta"
+        ):
             CompositeEnum(name, {name: 1})
 
     @pytest.mark.parametrize("name", sorted(_RESERVED_NAMES))
     def test_reserved_name_from_source_raises(self, name):
         Source = Enum("Source", {name: 1})
 
-        with pytest.raises(TypeError, match=f"'{name}' is reserved by CompositeEnumMeta"):
+        with pytest.raises(
+            TypeError, match=f"'{name}' is reserved by CompositeEnumMeta"
+        ):
 
             class Bad(CompositeEnum, includes=Source):
                 EXTRA = "extra"

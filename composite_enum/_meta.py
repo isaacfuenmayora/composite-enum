@@ -57,14 +57,16 @@ def _normalize_includes(
     return (includes,)  # type: ignore[return-value]
 
 
-_RESERVED_NAMES = frozenset({
-    "source_enum",
-    "included_enums",
-    "includes_enum",
-    "members_from",
-    "to_source",
-    "from_source",
-})
+_RESERVED_NAMES = frozenset(
+    {
+        "source_enum",
+        "included_enums",
+        "includes_enum",
+        "members_from",
+        "to_source",
+        "from_source",
+    }
+)
 
 
 def _get_source_enum(self: Enum) -> type[Enum] | None:
