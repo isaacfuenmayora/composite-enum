@@ -28,7 +28,10 @@ classifiers = [
 ]
 
 [dependency-groups]
-dev = ["pytest >= 8.0"]
+dev = [
+    "pytest >= 9.1",
+    "pytest-xdist>=3.8.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/isaacfuenmayora/composite-enum"
