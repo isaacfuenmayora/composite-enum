@@ -80,15 +80,13 @@ def _is_available(name: str) -> bool:
         case "pyrefly" | "ty":
             return shutil.which(name) is not None
         case _:
-            if shutil.which(name) is not None:
-                return True
             try:
-                subprocess.run(
+                result = subprocess.run(
                     [sys.executable, "-m", name, "--version"],
                     capture_output=True,
                     timeout=30,
                 )
-                return True
+                return result.returncode == 0
             except (FileNotFoundError, subprocess.TimeoutExpired):
                 return False
 
