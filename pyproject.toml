@@ -40,6 +40,8 @@ Issues = "https://github.com/isaacfuenmayora/composite-enum/issues"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not tripwire'"
+markers = ["tripwire: tests that detect external tool changes (non-blocking)"]
 
 [tool.ruff]
 target-version = "py310"

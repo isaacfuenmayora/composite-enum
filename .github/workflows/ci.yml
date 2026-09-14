@@ -19,5 +19,35 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
+      - run: pip install -e . && pip install pytest pytest-xdist
+      - run: pytest tests/test_composite.py -v -n auto
+
+  typecheck:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
+    continue-on-error: ${{ matrix.python-version == '3.15' }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
+      - run: pip install -e . && pip install pytest pytest-xdist pyright mypy basedpyright pyrefly ty
+      - run: pytest tests/test_typecheck.py -v -n auto
+
+  tripwire:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13", "3.14", "3.15"]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
       - run: pip install -e . && pip install pytest
-      - run: pytest -v
+      - run: pytest tests/test_typecheck.py -v -m tripwire
