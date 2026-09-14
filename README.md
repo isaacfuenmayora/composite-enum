@@ -159,25 +159,9 @@ class Signal(float, Enum, metaclass=CompositeEnumMeta, includes=Voltage):
 isinstance(Signal.LOW, float)  # True
 ```
 
-> **Note:** Type checkers have two limitations with the
-> `metaclass=CompositeEnumMeta` approach:
->
-> 1. They may flag the `includes` keyword, since they don't infer class
->    keywords from metaclass signatures. Add `# type: ignore[call-arg]`
->    to suppress this.
-> 2. The instance-level attributes `source_enum` and `to_source()` won't
->    be visible to type checkers, because the `.pyi` stub declares these
->    on `CompositeEnum`, not on arbitrary metaclass-created classes. The
->    class-level methods (`from_source()`, `members_from()`,
->    `included_enums()`, `includes_enum()`) work fine on both paths since
->    they're declared on the metaclass. Subclassing `CompositeEnum` is the
->    type-checker-friendly path: `from_source()` narrows to `Self | None`
->    and `members_from()` to `frozenset[Self]`.
->
-> Both work correctly at runtime regardless. Note that type checkers
-> cannot resolve dynamically injected member names (e.g.
-> `TokenType.UNION`) on either path. This is a general limitation of
-> enum metaclasses, not specific to `composite-enum`.
+> **Note:** The metaclass-only path has type checker limitations.
+> See [Type Checker Compatibility](#type-checker-compatibility) below.
+> Subclassing `CompositeEnum` is the type-checker-friendly path.
 
 ### Nested composition
 
@@ -282,6 +266,50 @@ Source enums (the ones in `includes`) can be any `Enum`, `StrEnum`, or
 | `Enum` (plain) | Anything |
 | `StrEnum` / `str, Enum` | Must be `str` |
 | `IntEnum` / `int, Enum` | Must be `int` |
+
+## Type Checker Compatibility
+
+`composite-enum` ships a hand-written `.pyi` stub with a `__getattr__`
+on the metaclass so that type checkers see dynamically injected members
+(e.g. `TokenType.UNION`) typed as the correct enum subclass. The
+trade-off is typos like `TokenType.TYPO` are silently accepted. Any
+attribute access is allowed.
+
+The tables below summarize how each type checker behaves with the
+`_meta.pyi` stub. All features work correctly at runtime regardless.
+The pyrefly column reflects `strict` mode, its default `basic` preset
+silently accepts everything.
+
+### `CompositeEnum` base class
+
+| Feature | pyright | mypy | basedpyright | pyrefly | ty | pyre | pytype |
+|---|---|---|---|---|---|---|---|
+| `includes=` keyword | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Injected member typed correctly | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅¹ |
+| Typo detection (`TT.NOPE`) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `source_enum` / `to_source()` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅¹ |
+| `from_source()` → `Self` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌¹ |
+| `members_from()` → `frozenset[Self]` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌¹ |
+| `includes=42` rejected | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ |
+
+### `metaclass=CompositeEnumMeta` (IntEnum, StrEnum, etc.)
+
+| Feature | pyright | mypy | basedpyright | pyrefly | ty | pyre | pytype |
+|---|---|---|---|---|---|---|---|
+| `includes=` keyword | ✅ | ✅ | ✅ | ✅ | ✅ | ❌² | ✅ |
+| Injected member typed correctly | ✅ | ✅ | ✅ | ✅ | ✅ | —² | ✅¹ |
+| Typo detection (`TT.NOPE`) | ❌ | ❌ | ❌ | ❌ | ❌ | —² | ❌ |
+| `source_enum` / `to_source()` | ❌³ | ❌³ | ❌³ | ❌³ | ❌³ | —² | ❌³ |
+| `from_source()` → `Enum`⁴ | ✅ | ✅ | ✅ | ✅ | ✅ | —² | ❌¹ |
+| `members_from()` → `frozenset[Enum]`⁴ | ✅ | ✅ | ✅ | ✅ | ✅ | —² | ❌¹ |
+| `includes=42` rejected | ❌ | ❌ | ❌ | ❌ | ✅ | —² | ❌ |
+
+**Notes:**
+
+1. pytype resolves composite classes to `Any` via the metaclass, so access succeeds vacuously with no real type narrowing.
+2. Pyre checks `__init_subclass__`, not the metaclass `__new__`, so it rejects the `includes=` keyword on metaclass-only classes. Suppress with `# pyre-ignore[28]` on the class definition.
+3. `source_enum` and `to_source()` are injected at runtime by `CompositeEnumMeta.__new__` and work on both paths. The `.pyi` stub declares them on `CompositeEnum` only, so type checkers can't see them on the metaclass-only path. Suppress with `# type: ignore[attr-defined]` (mypy) or `# pyright: ignore[reportAttributeAccessIssue]`.
+4. On the `CompositeEnum` path, `from_source()` returns `Self | None` and `members_from()` returns `frozenset[Self]`. On the metaclass path they return `Enum | None` and `frozenset[Enum]` instead . The return type is the base `Enum` rather than the concrete subclass. Cast or `# type: ignore[assignment]` when assigning to the concrete type.
 
 ## Caveats
 
