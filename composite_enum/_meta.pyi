@@ -1,8 +1,10 @@
 from collections.abc import Mapping, Sequence
 from enum import Enum, EnumMeta
-from typing import Any
+from typing import Any, TypeVar
 
 from typing_extensions import Self
+
+_T = TypeVar("_T", bound=Enum)
 
 class CompositeEnumMeta(EnumMeta):
     _composite_source_map_: Mapping[str, type[Enum]]
@@ -16,6 +18,7 @@ class CompositeEnumMeta(EnumMeta):
         includes: type[Enum] | Sequence[type[Enum]] = (),
         **kwds: Any,
     ) -> CompositeEnumMeta: ...
+    def __getattr__(cls: type[_T], name: str) -> _T: ...  # type: ignore
     def included_enums(cls) -> tuple[type[Enum], ...]: ...
     def includes_enum(cls, source: type[Enum]) -> bool: ...
     def members_from(cls, source: type[Enum]) -> frozenset[Enum]: ...
